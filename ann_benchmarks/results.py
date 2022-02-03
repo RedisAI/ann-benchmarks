@@ -8,7 +8,7 @@ import traceback
 
 
 def get_result_filename(dataset=None, count=None, definition=None,
-                        query_arguments=None, batch_mode=False):
+                        query_arguments=None, batch_mode=False, id=0):
     d = ['results']
     if dataset:
         d.append(dataset)
@@ -16,16 +16,20 @@ def get_result_filename(dataset=None, count=None, definition=None,
         d.append(str(count))
     if definition:
         d.append(definition.algorithm + ('-batch' if batch_mode else ''))
-        data = definition.arguments + query_arguments
-        d.append(re.sub(r'\W+', '_', json.dumps(data, sort_keys=True))
-                 .strip('_') + ".hdf5")
+        if 'redisearch' in definition.algorithm:
+            prefix = re.sub(r'\W+', '_', json.dumps(query_arguments, sort_keys=True)).strip('_')
+            d.append(prefix + f'_client_{id}.hdf5')
+        else:
+            data = definition.arguments + query_arguments
+            d.append(re.sub(r'\W+', '_', json.dumps(data, sort_keys=True))
+                     .strip('_') + ".hdf5")
     return os.path.join(*d)
 
 
 def store_results(dataset, count, definition, query_arguments, attrs, results,
-                  batch):
+                  batch, id=0):
     fn = get_result_filename(
-        dataset, count, definition, query_arguments, batch)
+        dataset, count, definition, query_arguments, batch, id)
     head, tail = os.path.split(fn)
     if not os.path.isdir(head):
         os.makedirs(head)
