@@ -5,7 +5,6 @@ import os
 import threading
 import time
 import traceback
-import h5py
 import inspect
 
 import colors
@@ -17,7 +16,7 @@ from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
 from ann_benchmarks.datasets import get_dataset, DATASETS
 from ann_benchmarks.distance import metrics, dataset_transform
-from ann_benchmarks.results import store_results, get_result_filename
+from ann_benchmarks.results import store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count,
@@ -122,14 +121,11 @@ function""" % (definition.module, definition.constructor, definition.arguments)
         if not test_only:
             per_client = len(X_train) // num_clients
             offset = per_client * (id - 1)
-            if num_clients == id:
-                fit_args = [X_train[offset:]]
-            else:
-                fit_args = [X_train[offset:(offset + per_client)]]
-            print('inserting %d out of %d vectors' % (len(fit_args[0]), len(X_train)))
-            if "offset" and "cap" in inspect.getfullargspec(algo.fit)[0]:
+            fit_args = [X_train]
+            if "offset" and "limit" in inspect.getfullargspec(algo.fit)[0]:
                 fit_args.append(offset)
-                fit_args.append(len(X_train))
+                if num_clients != id:
+                    fit_args.append(offset + per_client)
             
             t0 = time.time()
             memory_usage_before = algo.get_memory_usage()
@@ -138,23 +134,6 @@ function""" % (definition.module, definition.constructor, definition.arguments)
             index_size = algo.get_memory_usage() - memory_usage_before
             print('Built index in', build_time)
             print('Index size: ', index_size)
-        #     if build_only:
-        #         fn = get_result_filename(dataset, count)
-        #         fn = os.path.join(fn, definition.algorithm)
-        #         if not os.path.isdir(fn):
-        #             os.makedirs(fn)
-        #         fn = os.path.join(fn, f'build_stats_{id}.hdf5')
-        #         f = h5py.File(fn, 'w')
-        #         f.attrs["build_time"] = build_time
-        #         f.attrs["index_size"] = index_size
-        #         f.close()
-        else:
-            fn = get_result_filename(dataset, count)
-            fn = os.path.join(fn, 'build_stats.hdf5')
-            f = h5py.File(fn, 'r')
-            build_time = f.attrs["build_time"]
-            index_size = f.attrs["index_size"]
-            f.close()
 
         query_argument_groups = definition.query_argument_groups
         # Make sure that algorithms with no query argument groups still get run
@@ -171,8 +150,9 @@ function""" % (definition.module, definition.constructor, definition.arguments)
                     algo.set_query_arguments(*query_arguments)
                 descriptor, results = run_individual_query(
                     algo, X_train, X_test, distance, count, run_count, batch)
-                descriptor["build_time"] = build_time
-                descriptor["index_size"] = index_size
+                if not test_only:
+                    descriptor["build_time"] = build_time
+                    descriptor["index_size"] = index_size
                 descriptor["algo"] = definition.algorithm
                 descriptor["dataset"] = dataset
                 store_results(dataset, count, definition, query_arguments,

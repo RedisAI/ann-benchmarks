@@ -24,12 +24,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--host',
         help='host name or IP',
-        default=None)
+        default='localhost')
     parser.add_argument(
         '--port',
         type=positive_int,
         help='the port "host" is listening on',
-        default=None)
+        default=6379)
     parser.add_argument(
         '--auth', '-a',
         metavar='PASS',
@@ -62,13 +62,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    base = 'python run.py --local --algorithm redisearch-' + args.algorithm.lower() + ' --total-clients ' + str(args.build_clients) +\
-           ' -k ' + str(args.count) + ' --dataset ' + args.dataset
+    redis = Redis(host=args.host, port=args.port, password=args.auth, username=args.user)
+
+    base = 'python run.py --local --algorithm redisearch-' + args.algorithm.lower() + ' -k ' + str(args.count) + \
+           ' --dataset ' + args.dataset + ' --host ' + str(args.host) + ' --port ' + str(args.port)
 
     if args.user:   base += ' --user ' + str(args.user)
     if args.auth:   base += ' --auth ' + str(args.auth)
-    if args.host:   base += ' --host ' + str(args.host)
-    if args.port:   base += ' --port ' + str(args.port)
     if args.force:  base += ' --force'
 
     base_build = base + ' --build-only --total-clients ' + str(args.build_clients)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     fn = path.join(fn, 'build_stats.hdf5')
     f = h5py.File(fn, 'w')
     f.attrs["build_time"] = total_time
-    f.attrs["index_size"] = 1000 # demo - add client to get data usage
+    f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
     f.close()
 
     queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, args.test_clients + 1)]

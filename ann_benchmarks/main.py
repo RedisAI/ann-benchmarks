@@ -175,8 +175,6 @@ def main():
     if (args.build_only or args.test_only) and not args.local:
         raise Exception('Can\'t run build or test only on docker')
 
-    if args.user and not args.auth:
-        raise Exception('username specified without password (Auth)')
     conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user}
 
     if args.total_clients < args.client_id:
