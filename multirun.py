@@ -3,6 +3,7 @@ from multiprocessing import Process
 import argparse
 import time
 from redis import Redis
+from redis.cluster import RedisCluster
 import h5py
 from ann_benchmarks.main import positive_int
 from ann_benchmarks.results import get_result_filename
@@ -42,12 +43,12 @@ if __name__ == "__main__":
         default=None)
     parser.add_argument(
         '--build-clients',
-        type=positive_int,
+        type=int,
         help='the port "host" is listening on',
         default=1)
     parser.add_argument(
         '--test-clients',
-        type=positive_int,
+        type=int,
         help='the port "host" is listening on',
         default=1)
     parser.add_argument(
@@ -59,10 +60,15 @@ if __name__ == "__main__":
         metavar='ALGO',
         help='run redisearch with this algorithm',
         default="hnsw")
+    parser.add_argument(
+        '--cluster',
+        action='store_true',
+        help='working with a cluster')
 
     args = parser.parse_args()
 
-    redis = Redis(host=args.host, port=args.port, password=args.auth, username=args.user)
+    redis = RedisCluster if args.cluster else Redis
+    redis = redis(host=args.host, port=args.port, password=args.auth, username=args.user)
 
     base = 'python run.py --local --algorithm redisearch-' + args.algorithm.lower() + ' -k ' + str(args.count) + \
            ' --dataset ' + args.dataset + ' --host ' + str(args.host) + ' --port ' + str(args.port)
@@ -70,6 +76,7 @@ if __name__ == "__main__":
     if args.user:   base += ' --user ' + str(args.user)
     if args.auth:   base += ' --auth ' + str(args.auth)
     if args.force:  base += ' --force'
+    if args.cluster:base += ' --cluster'
 
     base_build = base + ' --build-only --total-clients ' + str(args.build_clients)
     base_test = base + ' --test-only --runs 1 --total-clients ' + str(args.test_clients)
@@ -88,7 +95,10 @@ if __name__ == "__main__":
     fn = path.join(fn, 'build_stats.hdf5')
     f = h5py.File(fn, 'w')
     f.attrs["build_time"] = total_time
-    f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
+    if args.cluster:
+        f.attrs["index_size"] = -1 # need to get total size from all the shards
+    else:
+        f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
     f.close()
 
     queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, args.test_clients + 1)]

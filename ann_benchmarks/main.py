@@ -132,6 +132,10 @@ def main():
         action='store_true',
         help='querying index only, not building it (should be built first)')
     parser.add_argument(
+        '--cluster',
+        action='store_true',
+        help='working with a cluster')
+    parser.add_argument(
         '--host',
         metavar='NAME',
         help='host name or IP',
@@ -175,7 +179,7 @@ def main():
     if (args.build_only or args.test_only) and not args.local:
         raise Exception('Can\'t run build or test only on docker')
 
-    conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user}
+    conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user, 'cluster': args.cluster}
 
     if args.total_clients < args.client_id:
         raise Exception('must satisfy 1 <= client_id <= total_clients')
