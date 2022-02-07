@@ -7,7 +7,6 @@ from redis.cluster import RedisCluster
 import h5py
 from ann_benchmarks.main import positive_int
 from ann_benchmarks.results import get_result_filename
-# from ann_benchmarks.datasets import DATASETS
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -81,29 +80,31 @@ if __name__ == "__main__":
     base_build = base + ' --build-only --total-clients ' + str(args.build_clients)
     base_test = base + ' --test-only --runs 1 --total-clients ' + str(args.test_clients)
 
-    clients = [Process(target=system, args=(base_build + ' --client-id ' + str(i),)) for i in range(1, args.build_clients + 1)]
+    if args.build_clients > 0:
+        clients = [Process(target=system, args=(base_build + ' --client-id ' + str(i),)) for i in range(1, args.build_clients + 1)]
 
-    t0 = time.time()
-    for client in clients: client.start()
-    for client in clients: client.join()
-    total_time = time.time() - t0
-    print(f'total build time: {total_time}\n\n')
-    
-    fn = get_result_filename(args.dataset, args.count)
-    if not path.isdir(fn):
-        makedirs(fn)
-    fn = path.join(fn, 'build_stats.hdf5')
-    f = h5py.File(fn, 'w')
-    f.attrs["build_time"] = total_time
-    if args.cluster:
-        f.attrs["index_size"] = -1 # need to get total size from all the shards
-    else:
-        f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
-    f.close()
+        t0 = time.time()
+        for client in clients: client.start()
+        for client in clients: client.join()
+        total_time = time.time() - t0
+        print(f'total build time: {total_time}\n\n')
 
-    queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, args.test_clients + 1)]
-    t0 = time.time()
-    for querier in queriers: querier.start()
-    for querier in queriers: querier.join()
-    query_time = time.time() - t0
-    print(f'total test time: {query_time}')
+        fn = get_result_filename(args.dataset, args.count)
+        if not path.isdir(fn):
+            makedirs(fn)
+        fn = path.join(fn, 'build_stats.hdf5')
+        f = h5py.File(fn, 'w')
+        f.attrs["build_time"] = total_time
+        if args.cluster:
+            f.attrs["index_size"] = -1 # TODO: get total size from all the shards
+        else:
+            f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
+        f.close()
+
+    if args.test_clients > 0:
+        queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, args.test_clients + 1)]
+        t0 = time.time()
+        for querier in queriers: querier.start()
+        for querier in queriers: querier.join()
+        query_time = time.time() - t0
+        print(f'total test time: {query_time}')

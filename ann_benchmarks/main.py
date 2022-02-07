@@ -147,7 +147,7 @@ def main():
         default=6379)
     parser.add_argument(
         '--auth', '-a',
-        metavar='NAME',
+        metavar='PASSWORD',
         help='password for connection',
         default=None)
     parser.add_argument(
@@ -157,13 +157,15 @@ def main():
         default=None)
     parser.add_argument(
         '--total-clients',
+        metavar='NUM',
         type=positive_int,
-        help='the port "host" is listening on',
+        help='total number of clients running in parallel',
         default=1)
     parser.add_argument(
         '--client-id',
+        metavar='NUM',
         type=positive_int,
-        help='the port "host" is listening on',
+        help='specific client id (among the total client)',
         default=1)
 
     args = parser.parse_args()

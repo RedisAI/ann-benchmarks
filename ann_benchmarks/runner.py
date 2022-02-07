@@ -111,7 +111,6 @@ function""" % (definition.module, definition.constructor, definition.arguments)
     print('got a train set of size (%d * %d)' % (X_train.shape[0], dimension))
 
     X_train, X_test = dataset_transform(D)
-    # X_train = X_train[:5000]
 
     try:
         prepared_queries = False
