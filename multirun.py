@@ -43,12 +43,14 @@ if __name__ == "__main__":
     parser.add_argument(
         '--build-clients',
         type=int,
-        help='the port "host" is listening on',
+        metavar='NUM',
+        help='total number of clients running in parallel to build the index (could be 0)',
         default=1)
     parser.add_argument(
         '--test-clients',
         type=int,
-        help='the port "host" is listening on',
+        metavar='NUM',
+        help='total number of clients running in parallel to test the index (could be 0)',
         default=1)
     parser.add_argument(
         '--force',
