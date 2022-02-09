@@ -1,41 +1,48 @@
 from __future__ import absolute_import
-import os
-import base64
 from redis import Redis
-from redisearch import Client, Query 
-import numpy as np
+from redis.cluster import RedisCluster
 from ann_benchmarks.constants import INDEX_DIR
 from ann_benchmarks.algorithms.base import BaseANN
 
 
 class RediSearch(BaseANN):
-    def __init__(self, metric, method_param):
+    def __init__(self, algo, metric, conn_params, method_param):
         self.metric = {'angular': 'cosine', 'euclidean': 'l2'}[metric]
         self.method_param = method_param
-        # print(self.method_param,save_index,query_param)
-        # self.ef=query_param['ef']
-        self.name = 'redisearch (%s)' % (self.method_param)
+        self.algo = algo
+        self.name = 'redisearch-%s (%s)' % (self.algo, self.method_param)
         self.index_name = "ann_benchmark"
-        self.client = Client(self.index_name, conn = Redis(decode_responses=False))
+        
+        redis = RedisCluster if conn_params['cluster'] else Redis
+        self.redis = redis(host=conn_params["host"], port=conn_params["port"],
+                           password=conn_params["auth"], username=conn_params["user"],
+                           decode_responses=False)
 
-    def fit(self, X):
-        # Only l2 is supported currently
-        self.client.redis.execute_command('FT.CREATE', self.index_name, 'SCHEMA', 'vector',  'VECTOR', 'FLOAT32', len(X[0]), 'L2', 'HNSW', 'INITIAL_CAP', len(X), 'M', self.method_param['M'] , 'EF', self.method_param["efConstruction"])
-        for i, x in enumerate(X):
-            self.client.redis.execute_command('HSET', f'ann_{i}', 'vector', x.tobytes())
+    def fit(self, X, offset=0, limit=None):
+        limit = limit if limit else len(X)
+        try:
+            # https://oss.redis.com/redisearch/master/Commands/#ftcreate
+            if self.algo == "HNSW":
+                self.redis.execute_command('FT.CREATE', self.index_name, 'SCHEMA', 'vector', 'VECTOR', self.algo, '12', 'TYPE', 'FLOAT32', 'DIM', len(X[0]), 'DISTANCE_METRIC', self.metric, 'INITIAL_CAP', len(X), 'M', self.method_param['M'] , 'EF_CONSTRUCTION', self.method_param["efConstruction"], target_nodes='random')
+            elif self.algo == "FLAT":
+                self.redis.execute_command('FT.CREATE', self.index_name, 'SCHEMA', 'vector', 'VECTOR', self.algo, '10', 'TYPE', 'FLOAT32', 'DIM', len(X[0]), 'DISTANCE_METRIC', self.metric, 'INITIAL_CAP', len(X), 'BLOCK_SIZE', self.method_param['BLOCK_SIZE'], target_nodes='random')
+        except Exception as e:
+            if 'Index already exists' not in str(e):
+                raise
 
+        for i in range(offset, limit):
+            self.redis.execute_command('HSET', f'ann_{i}', 'vector', X[i].tobytes())
 
     def set_query_arguments(self, ef):
         self.ef = ef
 
     def query(self, v, k):
-        base64_vector = base64.b64encode(v).decode('ascii')
-        base64_vector_escaped = base64_vector.translate(str.maketrans({"=":  r"\=",
-                                              "/":  r"\/",
-                                              "+":  r"\+"}))
-        q = Query('@vector:[' + base64_vector_escaped + ' TOPK ' +str(k)+'] => {$BASE64:TRUE; $efruntime:' + str(self.ef) + '}').sort_by('vector', asc=True).no_content()
-        return [int(doc.id.replace('ann_','')) for doc in self.client.search(q).docs]
+        # https://oss.redis.com/redisearch/master/Commands/#ftsearch
+        qparams = f' EF_RUNTIME {self.ef}' if self.algo == 'HNSW' else ''
+        vq = f'*=>[TOP_K {k} @vector $BLOB {qparams}]'
+        q = ['FT.SEARCH', self.index_name, vq, 'NOCONTENT', 'SORTBY', '__vector_score', 'LIMIT', '0', str(k), 'PARAMS', '2', 'BLOB', v.tobytes()]
+        return [int(doc.replace(b'ann_',b'')) for doc in self.redis.execute_command(*q, target_nodes='random')[1:]]
 
     def freeIndex(self):
-        self.client.redis.execute_command("FLUSHALL")
+        self.redis.execute_command("FLUSHALL")
 
