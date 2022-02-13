@@ -139,12 +139,12 @@ def main():
         '--host',
         metavar='NAME',
         help='host name or IP',
-        default="localhost")
+        default=None)
     parser.add_argument(
         '--port',
         type=positive_int,
         help='the port "host" is listening on',
-        default=6379)
+        default=None)
     parser.add_argument(
         '--auth', '-a',
         metavar='PASSWORD',

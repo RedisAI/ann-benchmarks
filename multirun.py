@@ -24,12 +24,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--host',
         help='host name or IP',
-        default='localhost')
+        default=None)
     parser.add_argument(
         '--port',
         type=positive_int,
         help='the port "host" is listening on',
-        default=6379)
+        default=None)
     parser.add_argument(
         '--auth', '-a',
         metavar='PASS',
@@ -60,20 +60,28 @@ if __name__ == "__main__":
         '--algorithm',
         metavar='ALGO',
         help='run redisearch with this algorithm',
-        default="hnsw")
+        default="redisearch-hnsw")
     parser.add_argument(
         '--cluster',
         action='store_true',
         help='working with a cluster')
 
     args = parser.parse_args()
+    isredis = True if 'redisearch' in args.algorithm else False
 
-    redis = RedisCluster if args.cluster else Redis
-    redis = redis(host=args.host, port=args.port, password=args.auth, username=args.user)
+    if isredis:
+        redis = RedisCluster if args.cluster else Redis
+        redis = redis(host=args.host, port=args.port, password=args.auth, username=args.user)
+    elif 'milvus' in args.algorithm:
+        if args.build_clients > 1:
+            print('milvus does not allow multi client build. running with one builder')
+            args.build_clients = 1
 
-    base = 'python run.py --local --algorithm redisearch-' + args.algorithm.lower() + ' -k ' + str(args.count) + \
-           ' --dataset ' + args.dataset + ' --host ' + str(args.host) + ' --port ' + str(args.port)
+    base = 'python run.py --local --algorithm ' + args.algorithm + ' -k ' + str(args.count) + \
+           ' --dataset ' + args.dataset
 
+    if args.host:   base += ' --host ' + str(args.host)
+    if args.port:   base += ' --port ' + str(args.port)
     if args.user:   base += ' --user ' + str(args.user)
     if args.auth:   base += ' --auth ' + str(args.auth)
     if args.force:  base += ' --force'
@@ -92,15 +100,17 @@ if __name__ == "__main__":
         print(f'total build time: {total_time}\n\n')
 
         fn = get_result_filename(args.dataset, args.count)
+        fn = path.join(fn, args.algorithm)
         if not path.isdir(fn):
             makedirs(fn)
         fn = path.join(fn, 'build_stats.hdf5')
         f = h5py.File(fn, 'w')
         f.attrs["build_time"] = total_time
-        if args.cluster:
-            f.attrs["index_size"] = -1 # TODO: get total size from all the shards
-        else:
-            f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
+        if isredis:
+            if args.cluster:
+                f.attrs["index_size"] = -1 # TODO: get total size from all the shards
+            else:
+                f.attrs["index_size"] = redis.ft('ann_benchmark').info()['vector_index_sz_mb']*0x100000
         f.close()
 
     if args.test_clients > 0:

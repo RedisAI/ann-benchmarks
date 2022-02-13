@@ -97,7 +97,7 @@ def get_unique_algorithms(definition_file):
 
 
 def get_definitions(definition_file, dimension, point_type="float",
-                    distance_metric="euclidean", count=10, conn_params=dict()):
+                    distance_metric="euclidean", count=10, conn_params={'host': None, 'port': None, 'auth': None, 'user': None, 'cluster': False}):
     definitions = _get_definitions(definition_file)
 
     algorithm_definitions = {}
