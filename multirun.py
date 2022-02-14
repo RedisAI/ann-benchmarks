@@ -77,10 +77,6 @@ if __name__ == "__main__":
     if isredis:
         redis = RedisCluster if args.cluster else Redis
         redis = redis(host=args.host, port=args.port, password=args.auth, username=args.user)
-    elif 'milvus' in args.algorithm:
-        if args.build_clients > 1:
-            print('milvus does not allow multi client build. running with one builder')
-            args.build_clients = 1
 
     base = 'python run.py --local --algorithm ' + args.algorithm + ' -k ' + str(args.count) + \
            ' --dataset ' + args.dataset

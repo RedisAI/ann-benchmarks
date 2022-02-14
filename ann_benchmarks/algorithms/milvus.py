@@ -19,22 +19,27 @@ class Milvus(BaseANN):
         self._host = conn_params['host']
         self._port = conn_params['port'] # 19530
         connections.connect(host=conn_params['host'], port=conn_params['port'])
-        fields = [
-            FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
-        ]
-        schema = CollectionSchema(fields)
-        self._milvus = Collection('milvus', schema)
+        try:
+            fields = [
+                FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
+                FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
+            ]
+            schema = CollectionSchema(fields)
+            self._milvus = Collection('milvus', schema)
+        except:
+            self._milvus = Collection('milvus')
         self._index_type = index_type
         self._method_params = method_params
         self._nprobe = None
         self._metric = metric
 
-    def fit(self, X):
+    def fit(self, X, offset=0, limit=None):
+        limit = limit if limit else len(X)
+        X = X[offset:limit]
         if self._metric == 'angular':
-            X = sklearn.preprocessing.normalize(X, axis=1)
+            X = sklearn.preprocessing.normalize(X)
 
-        self._milvus.insert([[id for id in range(len(X))], X.tolist()])
+        self._milvus.insert([[id for id in range(offset, limit)], X.tolist()])
         self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':'L2', 'params':self._method_params})
         self._milvus.load()
 
