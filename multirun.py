@@ -62,6 +62,11 @@ if __name__ == "__main__":
         help='run redisearch with this algorithm',
         default="redisearch-hnsw")
     parser.add_argument(
+        '--run-group',
+        metavar='NAME',
+        help='run only the named run group',
+        default=None)
+    parser.add_argument(
         '--cluster',
         action='store_true',
         help='working with a cluster')
@@ -80,12 +85,13 @@ if __name__ == "__main__":
     base = 'python run.py --local --algorithm ' + args.algorithm + ' -k ' + str(args.count) + \
            ' --dataset ' + args.dataset
 
-    if args.host:   base += ' --host ' + str(args.host)
-    if args.port:   base += ' --port ' + str(args.port)
-    if args.user:   base += ' --user ' + str(args.user)
-    if args.auth:   base += ' --auth ' + str(args.auth)
-    if args.force:  base += ' --force'
-    if args.cluster:base += ' --cluster'
+    if args.host:       base += ' --host ' + str(args.host)
+    if args.port:       base += ' --port ' + str(args.port)
+    if args.user:       base += ' --user ' + str(args.user)
+    if args.auth:       base += ' --auth ' + str(args.auth)
+    if args.force:      base += ' --force'
+    if args.cluster:    base += ' --cluster'
+    if args.run_group:  base += ' --run-group ' + str(args.run_group)
 
     base_build = base + ' --build-only --total-clients ' + str(args.build_clients)
     base_test = base + ' --test-only --runs 1 --total-clients ' + str(args.test_clients)

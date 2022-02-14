@@ -75,6 +75,11 @@ def main():
         help='run only the named algorithm',
         default=None)
     parser.add_argument(
+        '--run-group',
+        metavar='NAME',
+        help='run only the named run group',
+        default=None)
+    parser.add_argument(
         '--docker-tag',
         metavar='NAME',
         help='run only algorithms in a particular docker image',
@@ -165,7 +170,7 @@ def main():
         '--client-id',
         metavar='NUM',
         type=positive_int,
-        help='specific client id (among the total client)',
+        help='specific client id (among the total clients)',
         default=1)
 
     args = parser.parse_args()
@@ -226,8 +231,12 @@ def main():
     random.shuffle(definitions)
 
     if args.algorithm:
-        logger.info(f'running only {args.algorithm}')
+        logger.info(f'running only {args.algorithm} algorithms')
         definitions = [d for d in definitions if d.algorithm == args.algorithm]
+
+    if args.run_group:
+        logger.info(f'running only {args.run_group} run groups')
+        definitions = [d for d in definitions if d.run_group == args.run_group]
 
     if not args.local:
         # See which Docker images we have available
