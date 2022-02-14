@@ -15,16 +15,16 @@ from ann_benchmarks.algorithms.base import BaseANN
 
 
 class Milvus(BaseANN):
-    def __init__(self, metric, conn_params, index_type, method_params):
+    def __init__(self, metric, dim, conn_params, index_type, method_params):
         self._host = conn_params['host']
         self._port = conn_params['port'] # 19530
-        # connections.connect(host=conn_params['host'], port=conn_params['port'])
-        # fields = [
-        #     FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
-        #     FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=100)
-        # ]
-        # schema = CollectionSchema(fields)
-        # self._milvus = Collection('milvus', schema)
+        connections.connect(host=conn_params['host'], port=conn_params['port'])
+        fields = [
+            FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
+            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
+        ]
+        schema = CollectionSchema(fields)
+        self._milvus = Collection('milvus', schema)
         self._index_type = index_type
         self._method_params = method_params
         self._nprobe = None
@@ -33,15 +33,6 @@ class Milvus(BaseANN):
     def fit(self, X):
         if self._metric == 'angular':
             X = sklearn.preprocessing.normalize(X, axis=1)
-        
-        # TODO: if we can set the dim later, mabe return this to the init func
-        connections.connect(host=self._host, port=self._port)
-        fields = [
-            FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=len(X[0]))
-        ]
-        schema = CollectionSchema(fields)
-        self._milvus = Collection('milvus', schema)
 
         self._milvus.insert([[id for id in range(len(X))], X.tolist()])
         self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':'L2', 'params':self._method_params})
