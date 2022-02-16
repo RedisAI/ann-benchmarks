@@ -18,6 +18,10 @@ class Milvus(BaseANN):
     def __init__(self, metric, dim, conn_params, index_type, method_params):
         self._host = conn_params['host']
         self._port = conn_params['port'] # 19530
+        self._index_type = index_type
+        self._method_params = method_params
+        self._metric = metric
+        self._query_params = dict()
         connections.connect(host=conn_params['host'], port=conn_params['port'])
         try:
             fields = [
@@ -26,13 +30,10 @@ class Milvus(BaseANN):
             ]
             schema = CollectionSchema(fields)
             self._milvus = Collection('milvus', schema)
+            self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':'L2', 'params':self._method_params})
         except:
             self._milvus = Collection('milvus')
-        self._index_type = index_type
-        self._method_params = method_params
-        self._nprobe = None
-        self._metric = metric
-
+    
     def fit(self, X, offset=0, limit=None):
         limit = limit if limit else len(X)
         X = X[offset:limit]
@@ -40,11 +41,13 @@ class Milvus(BaseANN):
             X = sklearn.preprocessing.normalize(X)
 
         self._milvus.insert([[id for id in range(offset, limit)], X.tolist()])
-        self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':'L2', 'params':self._method_params})
-        self._milvus.load()
 
     def set_query_arguments(self, param):
-        self._query_params = dict()
+        if self._milvus.has_index():
+            if utility.wait_for_index_building_complete('milvus', 'vector'):
+                self._milvus.load()
+            else: raise Exception('index has error')
+        else: raise Exception('index is missing')
         if 'IVF_' in self._index_type:
             if param > self._method_params['nlist']:
                 print('warning! nprobe > nlist')
@@ -64,4 +67,4 @@ class Milvus(BaseANN):
         return result_ids
 
     def __str__(self):
-        return 'Milvus(index_type=%s, method_params=%s, query_params=%s)' % (self._index_type, str(self._method_params), str(self._nprobe))
+        return 'Milvus(index_type=%s, method_params=%s, query_params=%s)' % (self._index_type, str(self._method_params), str(self._query_params))
