@@ -68,3 +68,6 @@ class Milvus(BaseANN):
 
     def __str__(self):
         return 'Milvus(index_type=%s, method_params=%s, query_params=%s)' % (self._index_type, str(self._method_params), str(self._query_params))
+
+    def freeIndex(self):
+        utility.drop_collection("mlivus")
