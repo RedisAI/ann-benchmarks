@@ -20,7 +20,7 @@ class Milvus(BaseANN):
         self._port = conn_params['port'] # 19530
         self._index_type = index_type
         self._method_params = method_params
-        self.metric = {'angular': 'IP', 'euclidean': 'L2'}[metric]
+        self._metric = {'angular': 'IP', 'euclidean': 'L2'}[metric]
         self._query_params = dict()
         connections.connect(host=conn_params['host'], port=conn_params['port'])
         try:
