@@ -67,7 +67,7 @@ def create_ds(data_set):
 
             neighbors = f.create_dataset(f'neighbors', (len(test), count), dtype='i')
             distances = f.create_dataset(f'distances', (len(test), count), dtype='f')
-            
+
             # Generate ground truth only for the relevan bucket.
             train_bucket = np.array(bucket, dtype = np.int32)
             train_set = train[bucket]
