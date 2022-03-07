@@ -57,10 +57,18 @@ def create_ds(data_set):
             f.attrs['distance'] = ds.attrs['distance']
             f.attrs['dimension'] = len(test[0])
             f.attrs['point_type'] = 'float'
+
             f.create_dataset('train', train.shape, dtype=train.dtype)[:] = train
             f.create_dataset('test', test.shape, dtype=test.dtype)[:] = test
+            # Write the id buckets so on ingestion we will know what data to assign for each id.
+            for j, id_bucket in enumerate(buckets):
+                np_bucket = np.array(id_bucket, dtype=np.int32)
+                f.create_dataset(f'{bucket_names[j]}_ids', np_bucket.shape, dtype=np_bucket.dtype)[:] = np_bucket
+
             neighbors = f.create_dataset(f'neighbors', (len(test), count), dtype='i')
             distances = f.create_dataset(f'distances', (len(test), count), dtype='f')
+            
+            # Generate ground truth only for the relevan bucket.
             train_bucket = np.array(bucket, dtype = np.int32)
             train_set = train[bucket]
             print(train_set.shape)
