@@ -30,6 +30,7 @@ if __name__ == "__main__":
         help="the number of near neighbours to search for")
     parser.add_argument(
         '--host',
+        type=str,
         help='host name or IP',
         default=None)
     parser.add_argument(
@@ -39,11 +40,13 @@ if __name__ == "__main__":
         default=None)
     parser.add_argument(
         '--auth', '-a',
+        type=str,
         metavar='PASS',
         help='password for connection',
         default=None)
     parser.add_argument(
         '--user',
+        type=str,
         metavar='NAME',
         help='user name for connection',
         default=None)
@@ -70,6 +73,7 @@ if __name__ == "__main__":
         default="redisearch-hnsw")
     parser.add_argument(
         '--run-group',
+        type=str,
         metavar='NAME',
         help='run only the named run group',
         default=None)
@@ -87,24 +91,29 @@ if __name__ == "__main__":
     args = parser.parse_args()
     isredis = True if 'redisearch' in args.algorithm else False
 
+    if args.host is None:
+        args.host = 'localhost'
+    if args.port is None:
+        if 'redisearch' in args.algorithm: args.port = 6379
+        if 'milvus' in args.algorithm: args.port = 19530
+
     if isredis:
         redis = RedisCluster if args.cluster else Redis
         redis = redis(host=args.host, port=int(args.port), password=args.auth, username=args.user)
 
 
-    base = 'python3 run.py --local --algorithm ' + args.algorithm + ' -k ' + args.count + \
-           ' --dataset ' + args.dataset + " --runs {} ".format(args.runs)
+    base = 'python3 run.py --local --algorithm ' + args.algorithm + ' -k ' + args.count + ' --dataset ' + args.dataset
 
-    if args.host:       base += ' --host ' + str(args.host)
-    if args.port:       base += ' --port ' + str(args.port)
-    if args.user:       base += ' --user ' + str(args.user)
-    if args.auth:       base += ' --auth ' + str(args.auth)
+    if args.host:       base += ' --host ' + args.host
+    if args.port:       base += ' --port ' + args.port
+    if args.user:       base += ' --user ' + args.user
+    if args.auth:       base += ' --auth ' + args.auth
     if args.force:      base += ' --force'
     if args.cluster:    base += ' --cluster'
-    if args.run_group:  base += ' --run-group ' + str(args.run_group)
+    if args.run_group:  base += ' --run-group ' + args.run_group
 
-    base_build = base + ' --build-only --total-clients ' + str(args.build_clients)
-    base_test = base + ' --test-only --runs 1 --total-clients ' + str(args.test_clients)
+    base_build = base + ' --build-only --total-clients ' + args.build_clients
+    base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)
     workdir = pathlib.Path(__file__).parent.absolute()
     print("Changing the workdir to {}".format(workdir))
     os.chdir(workdir)
@@ -128,9 +137,7 @@ if __name__ == "__main__":
         print(fn)
         index_size = -1
         if isredis:
-            if args.cluster:
-                index_size = -1 # TODO: get total size from all the shards
-            else:
+            if not args.cluster: # TODO: get total size from all the shards
                 index_size = redis.ft('ann_benchmark').info()['vector_index_sz_mb']
             f.attrs["index_size"] = index_size
         f.close()
