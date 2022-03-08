@@ -118,8 +118,7 @@ if __name__ == "__main__":
         total_time = time.time() - t0
         print(f'total build time: {total_time}\n\n')
 
-        fn = get_result_filename(args.dataset, args.count)
-        print(fn)
+        fn = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
         fn = path.join(fn, args.algorithm)
         if not path.isdir(fn):
             makedirs(fn)
