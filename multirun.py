@@ -94,8 +94,8 @@ if __name__ == "__main__":
     if args.host is None:
         args.host = 'localhost'
     if args.port is None:
-        if 'redisearch' in args.algorithm: args.port = 6379
-        if 'milvus' in args.algorithm: args.port = 19530
+        if 'redisearch' in args.algorithm: args.port = '6379'
+        if 'milvus' in args.algorithm: args.port = '19530'
 
     if isredis:
         redis = RedisCluster if args.cluster else Redis
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         fn = path.join(fn, args.algorithm)
         if not path.isdir(fn):
             makedirs(fn)
-        fn = path.join(fn, 'build_stats.hdf5')
+        fn = path.join(fn, 'build_stats')
         f = h5py.File(fn, 'w')
         f.attrs["build_time"] = total_time
         print(fn)
@@ -139,14 +139,12 @@ if __name__ == "__main__":
         if isredis:
             if not args.cluster: # TODO: get total size from all the shards
                 index_size = redis.ft('ann_benchmark').info()['vector_index_sz_mb']
-            f.attrs["index_size"] = index_size
+            f.attrs["index_size"] = float(index_size)
         f.close()
         results_dict["build"] = {"total_clients":args.build_clients, "build_time": total_time, "vector_index_sz_mb": index_size }
 
-
-
     if int(args.test_clients) > 0:
-        queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, args.test_clients + 1)]
+        queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, int(args.test_clients) + 1)]
         t0 = time.time()
         for querier in queriers: querier.start()
         for querier in queriers: querier.join()
