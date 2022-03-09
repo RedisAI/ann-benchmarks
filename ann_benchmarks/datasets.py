@@ -7,6 +7,7 @@ from urllib.request import urlopen
 from urllib.request import urlretrieve
 
 from ann_benchmarks.distance import dataset_transform
+import urllib.parse
 
 
 def download(src, dst):
@@ -25,7 +26,10 @@ def get_dataset_fn(dataset):
 def get_dataset(which):
     hdf5_fn = get_dataset_fn(which)
     try:
-        url = 'http://ann-benchmarks.com/%s.hdf5' % which
+        if 'hybrid' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/hybrid_datasets/%s.hdf5' % urllib.parse.quote(which)
+        else:    
+            url = 'http://ann-benchmarks.com/%s.hdf5' % which
         download(url, hdf5_fn)
     except:
         print("Cannot download %s" % url)
@@ -39,7 +43,6 @@ def get_dataset(which):
     dimension = int(hdf5_f.attrs['dimension']) if 'dimension' in hdf5_f.attrs else len(hdf5_f['train'][0])
 
     return hdf5_f, dimension
-
 
 # Everything below this line is related to creating datasets
 # You probably never need to do this at home,
@@ -464,3 +467,10 @@ DATASETS = {
         out_fn, 'sift.hamming.256'),
     'kosarak-jaccard': lambda out_fn: kosarak(out_fn),
 }
+
+hybrid_datasets = ['glove-200-angular', 'gist-960-euclidean', 'deep-image-96-angular']
+percentiles= ['0.5', '1', '2', '5', '10', '20', '50']
+for dataset in hybrid_datasets:
+    for percentile in percentiles:
+        DATASETS[f'{dataset}-hybrid_{percentile}'] = lambda fn: ()
+

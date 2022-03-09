@@ -111,7 +111,7 @@ def write_output(train, test, fn, distance, point_type='float', count=100):
 def create_ds(size, distance, test_set, train_set):
     test_set = read_fbin(test_set)
     train_set= read_fbin(train_set, chunk_size=size*1000000)
-    write_output(train=train_set, test=test_set, fn=f'Text-to-Image-{size}M.hd5f', distance=distance, point_type='float', count=100)
+    write_output(train=train_set, test=test_set, fn=f'Text-to-Image-{size}M.hdf5', distance=distance, point_type='float', count=100)
 
 if __name__ == "__main__":
     create_ds()
