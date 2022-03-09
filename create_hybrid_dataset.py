@@ -68,7 +68,7 @@ def create_ds(data_set):
     buckets, bucket_names, numeric_values, text_values = create_buckets(train)
 
     for i, bucket in enumerate(buckets):
-        fn=f'{data_set}-hybrid_{bucket_names[i]}.hdf5'
+        fn=f'{data_set}-hybrid-{bucket_names[i]}.hdf5'
         with h5py.File(fn, 'w') as f:
             f.attrs['type'] = 'dense'
             f.attrs['distance'] = ds.attrs['distance']
