@@ -6,6 +6,7 @@ import threading
 import time
 import traceback
 import inspect
+import h5py
 
 import colors
 import docker
@@ -16,7 +17,7 @@ from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
 from ann_benchmarks.datasets import get_dataset, DATASETS
 from ann_benchmarks.distance import metrics, dataset_transform
-from ann_benchmarks.results import store_results
+from ann_benchmarks.results import get_result_filename, store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count,
@@ -166,7 +167,14 @@ function""" % (definition.module, definition.constructor, definition.arguments)
                     algo.set_hybrid_query(text)
                 descriptor, results = run_individual_query(
                     algo, X_train, X_test, distance, count, run_count, batch)
-                if not test_only:
+                if test_only:
+                    fn = get_result_filename(dataset, count)
+                    fn = os.path.join(fn, definition.algorithm, 'build_stats')
+                    f = h5py.File(fn, 'r')
+                    descriptor["build_time"] = f.attrs["build_time"]
+                    descriptor["index_size"] = f.attrs["index_size"]
+                    f.close()
+                else:
                     descriptor["build_time"] = build_time
                     descriptor["index_size"] = index_size
                 descriptor["algo"] = definition.algorithm
