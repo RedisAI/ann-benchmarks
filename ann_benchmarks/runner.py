@@ -168,12 +168,16 @@ function""" % (definition.module, definition.constructor, definition.arguments)
                 descriptor, results = run_individual_query(
                     algo, X_train, X_test, distance, count, run_count, batch)
                 if test_only:
-                    fn = get_result_filename(dataset, count)
-                    fn = os.path.join(fn, definition.algorithm, 'build_stats')
-                    f = h5py.File(fn, 'r')
-                    descriptor["build_time"] = f.attrs["build_time"]
-                    descriptor["index_size"] = f.attrs["index_size"]
-                    f.close()
+                    try:
+                        fn = get_result_filename(dataset, count)
+                        fn = os.path.join(fn, definition.algorithm, 'build_stats')
+                        f = h5py.File(fn, 'r')
+                        descriptor["build_time"] = f.attrs["build_time"]
+                        descriptor["index_size"] = f.attrs["index_size"]
+                        f.close()
+                    except:
+                        descriptor["build_time"] = 0
+                        descriptor["index_size"] = 0
                 else:
                     descriptor["build_time"] = build_time
                     descriptor["index_size"] = index_size
