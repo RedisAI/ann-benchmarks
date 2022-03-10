@@ -112,6 +112,17 @@ function""" % (definition.module, definition.constructor, definition.arguments)
 
     X_train, X_test = dataset_transform(D)
 
+    hybrid_buckets = None
+    if 'bucket_names' in D.attrs:
+        hybrid_buckets = {}
+        bucket_names = D.attrs['bucket_names']
+        for bucket_name in bucket_names:
+            bucket_dict = {}
+            bucket_dict['ids'] = numpy.array(D[f'{bucket_name}_ids'])
+            bucket_dict['text'] = D[bucket_name]['text'][()]
+            bucket_dict['number'] = D[bucket_name]['number'][()]
+            hybrid_buckets[bucket_name] = bucket_dict
+
     try:
         prepared_queries = False
         if hasattr(algo, "supports_prepared_queries"):
@@ -120,15 +131,17 @@ function""" % (definition.module, definition.constructor, definition.arguments)
         if not test_only:
             per_client = len(X_train) // num_clients
             offset = per_client * (id - 1)
-            fit_args = [X_train]
+            fit_kwargs = {}
             if "offset" and "limit" in inspect.getfullargspec(algo.fit)[0]:
-                fit_args.append(offset)
+                fit_kwargs['offset']=offset
                 if num_clients != id:
-                    fit_args.append(offset + per_client)
-            
+                    fit_kwargs['limit']=offset + per_client
+            if hybrid_buckets:
+                fit_kwargs['hybrid_buckets']=hybrid_buckets
+
             t0 = time.time()
             memory_usage_before = algo.get_memory_usage()
-            algo.fit(*fit_args)
+            algo.fit(X_train, **fit_kwargs)
             build_time = time.time() - t0
             index_size = algo.get_memory_usage() - memory_usage_before
             print('Built index in', build_time)
@@ -147,6 +160,10 @@ function""" % (definition.module, definition.constructor, definition.arguments)
                       (pos, len(query_argument_groups)))
                 if query_arguments:
                     algo.set_query_arguments(*query_arguments)
+                if hybrid_buckets:
+                    text = hybrid_buckets[D.attrs['selected_bucket']]['text'].decode()
+                    print("setting hybrid text query", text)
+                    algo.set_hybrid_query(text)
                 descriptor, results = run_individual_query(
                     algo, X_train, X_test, distance, count, run_count, batch)
                 if not test_only:
