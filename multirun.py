@@ -1,14 +1,45 @@
-from os import system, path, makedirs
 from multiprocessing import Process
 import argparse
 import time
 import json
+from numpy import average
 from redis import Redis
 from redis.cluster import RedisCluster
 import h5py
 import os
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 import pathlib
 from ann_benchmarks.results import get_result_filename
+
+def aggregate_outputs(files, clients):
+    different_attrs = set([f.split('client')[0] for f in files])
+    assert len(different_attrs) * clients == len(files), "missing files!"
+    groups = [[f + f'client_{i}.hdf5' for i in range(1, clients + 1)] for f in different_attrs]
+
+    for group in groups:
+        fn = group[0].split('client')[0][:-1] + '.hdf5'
+        f = h5py.File(fn, 'w')
+        
+        fs = [h5py.File(fi, 'r') for fi in group]
+        for k, v in fs[0].attrs.items():
+            f.attrs[k] = v
+        f.attrs["best_search_time"] = average([fi.attrs["best_search_time"] for fi in fs])
+        f.attrs["candidates"] = average([fi.attrs["candidates"] for fi in fs])
+        
+        times = f.create_dataset('times', fs[0]['times'].shape, 'f')
+        neighbors = f.create_dataset('neighbors', fs[0]['neighbors'].shape, 'i')
+        distances = f.create_dataset('distances', fs[0]['distances'].shape, 'f')
+        num_tests = len(times)
+        
+        for i in range(num_tests):
+            neighbors[i] = [n for n in fs[0]['neighbors'][i]]
+            distances[i] = [n for n in fs[0]['distances'][i]]
+            times[i] = average([fi['times'][i] for fi in fs])
+        
+        [fi.close() for fi in fs]
+        [os.remove(fi) for fi in group]
+        f.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -117,9 +148,13 @@ if __name__ == "__main__":
     workdir = pathlib.Path(__file__).parent.absolute()
     print("Changing the workdir to {}".format(workdir))
     os.chdir(workdir)
+    outputsdir = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
+    outputsdir = os.path.join(outputsdir, args.algorithm)
+    if not os.path.isdir(outputsdir):
+        os.makedirs(outputsdir)
     results_dict = {}
     if int(args.build_clients) > 0:
-        clients = [Process(target=system, args=(base_build + ' --client-id ' + str(i),)) for i in range(1, int(args.build_clients) + 1)]
+        clients = [Process(target=os.system, args=(base_build + ' --client-id ' + str(i),)) for i in range(1, int(args.build_clients) + 1)]
 
         t0 = time.time()
         for client in clients: client.start()
@@ -127,11 +162,7 @@ if __name__ == "__main__":
         total_time = time.time() - t0
         print(f'total build time: {total_time}\n\n')
 
-        fn = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
-        fn = path.join(fn, args.algorithm)
-        if not path.isdir(fn):
-            makedirs(fn)
-        fn = path.join(fn, 'build_stats')
+        fn = os.path.join(outputsdir, 'build_stats')
         f = h5py.File(fn, 'w')
         f.attrs["build_time"] = total_time
         print(fn)
@@ -144,13 +175,27 @@ if __name__ == "__main__":
         results_dict["build"] = {"total_clients":args.build_clients, "build_time": total_time, "vector_index_sz_mb": index_size }
 
     if int(args.test_clients) > 0:
-        queriers = [Process(target=system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, int(args.test_clients) + 1)]
+        queriers = [Process(target=os.system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, int(args.test_clients) + 1)]
+        test_stats = set()
+        watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
+        def on_created_or_modified(event):
+            test_stats.add(event.src_path)
+        watcher.on_created = on_created_or_modified
+        watcher.on_modified = on_created_or_modified
+        observer = Observer()
+        observer.schedule(watcher, workdir, True)
+        observer.start()
         t0 = time.time()
         for querier in queriers: querier.start()
         for querier in queriers: querier.join()
         query_time = time.time() - t0
         print(f'total test time: {query_time}')
+        observer.stop()
+        observer.join()
         results_dict["query"] = {"total_clients":args.test_clients, "test_time": query_time }
+        print(f'summarizing clients data ({len(test_stats)} files into {len(test_stats) // int(args.test_clients)})...')
+        aggregate_outputs(test_stats, int(args.test_clients))
+        print('done!')
 
     if args.json_output != "":
         with open(args.json_output,"w")as json_out_file:
