@@ -14,9 +14,23 @@ from ann_benchmarks.results import get_result_filename
 
 def aggregate_outputs(files, clients):
     different_attrs = set([f.split('client')[0] for f in files])
-    assert len(different_attrs) * clients == len(files), "missing files!"
     groups = [[f + f'client_{i}.hdf5' for i in range(1, clients + 1)] for f in different_attrs]
 
+    if len(different_attrs) * clients > len(files):
+        print(f'missing files! got {len(files)} but expected {len(different_attrs) * clients}')
+        print('got files:')
+        [print('\t'+f) for f in files]
+        print('probably missing files:')
+        [[print('\t'+f) for f in g if f not in files] for g in groups]
+        assert False
+    elif len(different_attrs) * clients < len(files):
+        print(f'too many files! got {len(files)} but expected {len(different_attrs) * clients}')
+        print('got files:')
+        [print('\t'+f) for f in files]
+        print('probably unnecessary files:')
+        [print('\t'+f) for f in files if len([g for g in groups if f in g]) == 0]
+        raise False
+        
     for group in groups:
         fn = group[0].split('client')[0][:-1] + '.hdf5'
         f = h5py.File(fn, 'w')
@@ -193,7 +207,7 @@ if __name__ == "__main__":
         observer.stop()
         observer.join()
         results_dict["query"] = {"total_clients":args.test_clients, "test_time": query_time }
-        print(f'summarizing clients data ({len(test_stats)} files into {len(test_stats) // int(args.test_clients)})...')
+        print(f'summarizing {int(args.test_clients)} clients data ({len(test_stats)} files into {len(test_stats) // int(args.test_clients)})...')
         aggregate_outputs(test_stats, int(args.test_clients))
         print('done!')
 
