@@ -28,6 +28,8 @@ def get_dataset(which):
     try:
         if 'hybrid' in which:
             url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/hybrid_datasets/%s.hdf5' % urllib.parse.quote(which)
+        elif 'Text-to-Image' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/big_ann/%s.hdf5' % urllib.parse.quote(which)
         else:    
             url = 'http://ann-benchmarks.com/%s.hdf5' % which
         download(url, hdf5_fn)
@@ -468,7 +470,14 @@ DATASETS = {
     'kosarak-jaccard': lambda out_fn: kosarak(out_fn),
 }
 
+
+big_ann_datasets = [f'Text-to-Image-{x}' for x in ['10M', '20M', '30M', '40M', '50M', '60M', '70M', '80M', '90M', '100M']]
+for dataset in big_ann_datasets:
+     DATASETS[dataset] = lambda fn: ()
+
+
 hybrid_datasets = ['glove-200-angular', 'gist-960-euclidean', 'deep-image-96-angular']
+hybrid_datasets.extend(big_ann_datasets)
 percentiles= ['0.5', '1', '2', '5', '10', '20', '50']
 for dataset in hybrid_datasets:
     for percentile in percentiles:
