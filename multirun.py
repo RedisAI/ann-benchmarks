@@ -171,15 +171,16 @@ if __name__ == "__main__":
     if not os.path.isdir(outputsdir):
         os.makedirs(outputsdir)
     results_dicts = []
-    test_stats_files = set()
-    watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
-    def on_created_or_modified(event):
-        test_stats_files.add(event.src_path)
-    watcher.on_created = on_created_or_modified
-    watcher.on_modified = on_created_or_modified
-    observer = Observer()
-    observer.schedule(watcher, workdir, True)
-    observer.start()
+    if int(args.test_clients) > 1:
+        test_stats_files = set()
+        watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
+        def on_created_or_modified(event):
+            test_stats_files.add(event.src_path)
+        watcher.on_created = on_created_or_modified
+        watcher.on_modified = on_created_or_modified
+        observer = Observer()
+        observer.schedule(watcher, workdir, True)
+        observer.start()
 
     for run_group in run_groups:
         if isredis:
@@ -221,11 +222,12 @@ if __name__ == "__main__":
 
         results_dicts.append(results_dict)
 
-    observer.stop()
-    observer.join()
-    print(f'summarizing {int(args.test_clients)} clients data ({len(test_stats_files)} files into {len(test_stats_files) // int(args.test_clients)})...')
-    aggregate_outputs(test_stats_files, int(args.test_clients))
-    print('done!')
+    if int(args.test_clients) > 1:
+        observer.stop()
+        observer.join()
+        print(f'summarizing {int(args.test_clients)} clients data ({len(test_stats_files)} files into {len(test_stats_files) // int(args.test_clients)})...')
+        aggregate_outputs(test_stats_files, int(args.test_clients))
+        print('done!')
 
     if args.json_output != "":
         with open(args.json_output,"w") as json_out_file:
