@@ -96,6 +96,18 @@ def get_unique_algorithms(definition_file):
     return list(sorted(algos))
 
 
+def get_run_groups(definition_file, algo = None):
+    definitions = _get_definitions(definition_file)
+    run_groups = set()
+    for point in definitions:
+        for metric in definitions[point]:
+            for algorithm in definitions[point][metric]:
+                if algo == None or algo == algorithm:
+                    for run_group in definitions[point][metric][algorithm]['run-groups'].keys():
+                        run_groups.add(run_group)
+    return list(sorted(run_groups))
+
+
 def get_definitions(definition_file, dimension, point_type="float",
                     distance_metric="euclidean", count=10, conn_params={'host': None, 'port': None, 'auth': None, 'user': None, 'cluster': False}):
     definitions = _get_definitions(definition_file)
