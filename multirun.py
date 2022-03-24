@@ -171,6 +171,8 @@ if __name__ == "__main__":
     if not os.path.isdir(outputsdir):
         os.makedirs(outputsdir)
     results_dicts = []
+
+    # skipping aggregation if using one tester
     if int(args.test_clients) > 1:
         test_stats_files = set()
         watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
@@ -222,6 +224,7 @@ if __name__ == "__main__":
 
         results_dicts.append(results_dict)
 
+    # skipping aggregation if using one tester
     if int(args.test_clients) > 1:
         observer.stop()
         observer.join()
