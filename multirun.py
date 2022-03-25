@@ -191,8 +191,7 @@ if __name__ == "__main__":
         watcher.on_created = on_created_or_modified
         watcher.on_modified = on_created_or_modified
         observer = Observer()
-        results_dir = workdir / 'results'
-        observer.schedule(watcher, results_dir, True)
+        observer.schedule(watcher, outputsdir)
         observer.start()
 
     for run_group in run_groups:
