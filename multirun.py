@@ -97,12 +97,6 @@ if __name__ == "__main__":
         help='user name for connection',
         default=None)
     parser.add_argument(
-        '--full-flow-clients',
-        type=str,
-        metavar='NUM',
-        help='total number of clients running in parallel to execute a full flow (defaults to 0)',
-        default="0")
-    parser.add_argument(
         '--build-clients',
         type=str,
         metavar='NUM',
@@ -174,7 +168,6 @@ if __name__ == "__main__":
     if args.force:      base += ' --force'
     if args.cluster:    base += ' --cluster'
 
-    base_flow = base + ' --runs {} --total-clients {}'.format(args.runs, args.full_flow_clients)
     base_build = base + ' --build-only --total-clients ' + args.build_clients
     base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)
     outputsdir = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
@@ -182,33 +175,7 @@ if __name__ == "__main__":
     if not os.path.isdir(outputsdir):
         os.makedirs(outputsdir)
     results_dict = {}
-    flow_clients = int(args.full_flow_clients)
-    build_clients = int(args.build_clients)
-    test_clients = int(args.test_clients)
-    if flow_clients >- 0 :
-        queriers = [Process(target=os.system, args=(base_flow + ' --client-id ' + str(i),)) for i in range(1, int(args.full_flow_clients) + 1)]
-        test_stats = set()
-        watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
-        def on_created_or_modified(event):
-            test_stats.add(event.src_path)
-        watcher.on_created = on_created_or_modified
-        watcher.on_modified = on_created_or_modified
-        observer = Observer()
-        observer.schedule(watcher, workdir, True)
-        observer.start()
-        t0 = time.time()
-        for querier in queriers: querier.start()
-        for querier in queriers: querier.join()
-        query_time = time.time() - t0
-        print(f'total test time: {query_time}')
-        observer.stop()
-        observer.join()
-        results_dict["query"] = {"total_clients":args.full_flow_clients, "test_time": query_time }
-        print(f'summarizing {int(args.full_flow_clients)} clients data ({len(test_stats)} files into {len(test_stats) // int(args.full_flow_clients)})...')
-        aggregate_outputs(test_stats, int(args.full_flow_clients))
-        print('done!')
-
-    if build_clients > 0 and test_clients == 0:
+    if int(args.build_clients) > 0:
         clients = [Process(target=os.system, args=(base_build + ' --client-id ' + str(i),)) for i in range(1, int(args.build_clients) + 1)]
 
         t0 = time.time()
@@ -229,7 +196,7 @@ if __name__ == "__main__":
         f.close()
         results_dict["build"] = {"total_clients":args.build_clients, "build_time": total_time, "vector_index_sz_mb": index_size }
 
-    elif test_clients > 0 and build_clients == 0:
+    if int(args.test_clients) > 0:
         queriers = [Process(target=os.system, args=(base_test + ' --client-id ' + str(i),)) for i in range(1, int(args.test_clients) + 1)]
         test_stats = set()
         watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
@@ -289,7 +256,7 @@ if __name__ == "__main__":
         aggregate_outputs(test_stats_files, int(args.test_clients))
         print('done!')
 
-    elif args.json_output != "":
+    if args.json_output != "":
         with open(args.json_output,"w")as json_out_file:
             print(f'storing json result into: {args.json_output}')
             json.dump(results_dict,json_out_file)
