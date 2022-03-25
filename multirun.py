@@ -11,6 +11,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import pathlib
 from ann_benchmarks.results import get_result_filename
+from ann_benchmarks.algorithms.definitions import get_run_groups
 
 def aggregate_outputs(files, clients):
     different_attrs = set([f.split('client')[0] for f in files])
@@ -140,6 +141,13 @@ if __name__ == "__main__":
         help='working with a cluster')
 
     args = parser.parse_args()
+
+    # we should change to the proper workdir as soon we parse the args
+    # given some functions bellow require on relative path to the project
+    workdir = pathlib.Path(__file__).parent.absolute()
+    print("Changing the workdir to {}".format(workdir))
+    os.chdir(workdir)
+
     isredis = True if 'redisearch' in args.algorithm else False
 
     if args.host is None:
@@ -151,7 +159,11 @@ if __name__ == "__main__":
     if isredis:
         redis = RedisCluster if args.cluster else Redis
         redis = redis(host=args.host, port=int(args.port), password=args.auth, username=args.user)
-
+    
+    if args.run_group is not None:
+        run_groups = [args.run_group]
+    else:
+        run_groups = get_run_groups('algos.yaml', args.algorithm)
 
     base = 'python3 run.py --local --algorithm ' + args.algorithm + ' -k ' + args.count + ' --dataset ' + args.dataset
 
@@ -161,14 +173,10 @@ if __name__ == "__main__":
     if args.auth:       base += ' --auth ' + args.auth
     if args.force:      base += ' --force'
     if args.cluster:    base += ' --cluster'
-    if args.run_group:  base += ' --run-group ' + args.run_group
 
     base_flow = base + ' --runs {} --total-clients {}'.format(args.runs, args.full_flow_clients)
     base_build = base + ' --build-only --total-clients ' + args.build_clients
     base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)
-    workdir = pathlib.Path(__file__).parent.absolute()
-    print("Changing the workdir to {}".format(workdir))
-    os.chdir(workdir)
     outputsdir = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
     outputsdir = os.path.join(outputsdir, args.algorithm)
     if not os.path.isdir(outputsdir):
@@ -226,22 +234,59 @@ if __name__ == "__main__":
         test_stats = set()
         watcher = PatternMatchingEventHandler(["*.hdf5"], ignore_directories=True )
         def on_created_or_modified(event):
-            test_stats.add(event.src_path)
+            test_stats_files.add(event.src_path)
         watcher.on_created = on_created_or_modified
         watcher.on_modified = on_created_or_modified
         observer = Observer()
         observer.schedule(watcher, workdir, True)
         observer.start()
-        t0 = time.time()
-        for querier in queriers: querier.start()
-        for querier in queriers: querier.join()
-        query_time = time.time() - t0
-        print(f'total test time: {query_time}')
+
+    for run_group in run_groups:
+        if isredis:
+            redis.flushall()
+
+        results_dict = {}
+        curr_base_build = base_build + ' --run-group ' + run_group
+        curr_base_test = base_test + ' --run-group ' + run_group
+
+        if int(args.build_clients) > 0:
+            clients = [Process(target=os.system, args=(curr_base_build + ' --client-id ' + str(i),)) for i in range(1, int(args.build_clients) + 1)]
+
+            t0 = time.time()
+            for client in clients: client.start()
+            for client in clients: client.join()
+            total_time = time.time() - t0
+            print(f'total build time: {total_time}\n\n')
+
+            fn = os.path.join(outputsdir, 'build_stats')
+            f = h5py.File(fn, 'w')
+            f.attrs["build_time"] = total_time
+            print(fn)
+            index_size = -1
+            if isredis:
+                if not args.cluster: # TODO: get total size from all the shards
+                    index_size = float(redis.ft('ann_benchmark').info()['vector_index_sz_mb'])*1024
+                f.attrs["index_size"] = index_size
+            f.close()
+            results_dict["build"] = {"total_clients":args.build_clients, "build_time": total_time, "vector_index_sz_mb": index_size }
+
+        if int(args.test_clients) > 0:
+            queriers = [Process(target=os.system, args=(curr_base_test + ' --client-id ' + str(i),)) for i in range(1, int(args.test_clients) + 1)]
+            t0 = time.time()
+            for querier in queriers: querier.start()
+            for querier in queriers: querier.join()
+            query_time = time.time() - t0
+            print(f'total test time: {query_time}')
+            results_dict["query"] = {"total_clients":args.test_clients, "test_time": query_time }
+
+        results_dicts.append(results_dict)
+
+    # skipping aggregation if using one tester
+    if int(args.test_clients) > 1:
         observer.stop()
         observer.join()
-        results_dict["query"] = {"total_clients":args.test_clients, "test_time": query_time }
-        print(f'summarizing {int(args.test_clients)} clients data ({len(test_stats)} files into {len(test_stats) // int(args.test_clients)})...')
-        aggregate_outputs(test_stats, int(args.test_clients))
+        print(f'summarizing {int(args.test_clients)} clients data ({len(test_stats_files)} files into {len(test_stats_files) // int(args.test_clients)})...')
+        aggregate_outputs(test_stats_files, int(args.test_clients))
         print('done!')
 
     elif args.json_output != "":
