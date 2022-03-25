@@ -212,7 +212,7 @@ if __name__ == "__main__":
             index_size = -1
             if isredis:
                 if not args.cluster: # TODO: get total size from all the shards
-                    index_size = float(redis.ft('ann_benchmark').info()['vector_index_sz_mb'])*1000
+                    index_size = float(redis.ft('ann_benchmark').info()['vector_index_sz_mb'])*1024
                 f.attrs["index_size"] = index_size
             f.close()
             results_dict["build"] = {"total_clients":args.build_clients, "build_time": total_time, "vector_index_sz_mb": index_size }
