@@ -135,6 +135,13 @@ if __name__ == "__main__":
         help='working with a cluster')
 
     args = parser.parse_args()
+
+    # we should change to the proper workdir as soon we parse the args
+    # given some functions bellow require on relative path to the project
+    workdir = pathlib.Path(__file__).parent.absolute()
+    print("Changing the workdir to {}".format(workdir))
+    os.chdir(workdir)
+
     isredis = True if 'redisearch' in args.algorithm else False
 
     if args.host is None:
@@ -163,9 +170,6 @@ if __name__ == "__main__":
 
     base_build = base + ' --build-only --total-clients ' + args.build_clients
     base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)
-    workdir = pathlib.Path(__file__).parent.absolute()
-    print("Changing the workdir to {}".format(workdir))
-    os.chdir(workdir)
     outputsdir = "{}/{}".format(workdir, get_result_filename(args.dataset, args.count))
     outputsdir = os.path.join(outputsdir, args.algorithm)
     if not os.path.isdir(outputsdir):
