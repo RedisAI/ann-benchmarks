@@ -135,6 +135,12 @@ if __name__ == "__main__":
         '--cluster',
         action='store_true',
         help='working with a cluster')
+    parser.add_argument(
+        '--shards',
+        type=str,
+        metavar='NUM',
+        default="1",
+        help='specify number of shards')
 
     args = parser.parse_args()
 
@@ -169,6 +175,7 @@ if __name__ == "__main__":
     if args.auth:       base += ' --auth ' + args.auth
     if args.force:      base += ' --force'
     if args.cluster:    base += ' --cluster'
+    if args.shards:     base += ' --shards' + args.shards
 
     base_build = base + ' --build-only --total-clients ' + args.build_clients
     base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)

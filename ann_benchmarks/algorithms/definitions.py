@@ -109,7 +109,7 @@ def get_run_groups(definition_file, algo = None):
 
 
 def get_definitions(definition_file, dimension, point_type="float",
-                    distance_metric="euclidean", count=10, conn_params={'host': None, 'port': None, 'auth': None, 'user': None, 'cluster': False}):
+                    distance_metric="euclidean", count=10, conn_params={'host': None, 'port': None, 'auth': None, 'user': None, 'cluster': False, 'shards': 1}):
     definitions = _get_definitions(definition_file)
 
     algorithm_definitions = {}
