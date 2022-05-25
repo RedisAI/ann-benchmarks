@@ -175,7 +175,7 @@ if __name__ == "__main__":
     if args.auth:       base += ' --auth ' + args.auth
     if args.force:      base += ' --force'
     if args.cluster:    base += ' --cluster'
-    if args.shards:     base += ' --shards' + args.shards
+    if args.shards:     base += ' --shards ' + args.shards
 
     base_build = base + ' --build-only --total-clients ' + args.build_clients
     base_test = base + ' --test-only --runs {} --total-clients {}'.format(args.runs, args.test_clients)
