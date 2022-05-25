@@ -172,6 +172,12 @@ def main():
         type=positive_int,
         help='specific client id (among the total clients)',
         default=1)
+    parser.add_argument(
+        '--shards',
+        type=str,
+        metavar='NUM',
+        default="1",
+        help='specify number of shards')
 
     args = parser.parse_args()
     if args.timeout == -1:
@@ -186,7 +192,7 @@ def main():
     if (args.build_only or args.test_only) and not args.local:
         raise Exception('Can\'t run build or test only on docker')
 
-    conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user, 'cluster': args.cluster}
+    conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user, 'cluster': args.cluster, 'shards': args.shards}
 
     if args.total_clients < args.client_id:
         raise Exception('must satisfy 1 <= client_id <= total_clients')
