@@ -79,6 +79,8 @@ def rel(dataset_distances, run_distances, metrics):
 def queries_per_second(queries, attrs):
     return 1.0 / attrs["best_search_time"]
 
+def percentile_50(queries, attrs):
+    return attrs["search_time_percentiles_usec"][50.0]/1000.0
 
 def index_size(queries, attrs):
     # TODO(erikbern): should replace this with peak memory usage or something
@@ -123,6 +125,11 @@ all_metrics = {
         "description": "Queries per second (1/s)",
         "function": lambda true_distances, run_distances, metrics, run_attrs: queries_per_second(true_distances, run_attrs),  # noqa
         "worst": float("-inf")
+    },
+    "p50": {
+        "description": "Percentile 50 (millis)",
+        "function": lambda true_distances, run_distances, metrics, run_attrs: percentile_50(true_distances, run_attrs),  # noqa
+        "worst": float("inf")
     },
     "distcomps": {
         "description": "Distance computations",

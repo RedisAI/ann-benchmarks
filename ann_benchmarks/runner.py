@@ -10,6 +10,7 @@ import colors
 import docker
 import numpy
 import psutil
+import hdrhistogram
 
 from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
@@ -19,16 +20,20 @@ from ann_benchmarks.results import store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count,
-                         batch):
+                         batch, exported_percentiles=[0.0,25.0,50.0,75.0,95.0,99.0,100.0]):
     prepared_queries = \
         (batch and hasattr(algo, "prepare_batch_query")) or \
         ((not batch) and hasattr(algo, "prepare_query"))
 
     best_search_time = float('inf')
+    latency_histogram = hdrhistogram.HdrHistogram(1, 60 * 60 * 1000, 2)
+
     for i in range(run_count):
         print('Run %d/%d...' % (i + 1, run_count))
         # a bit dumb but can't be a scalar since of Python's scoping rules
         n_items_processed = [0]
+
+
 
         def single_query(v):
             if prepared_queries:
@@ -72,6 +77,9 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         else:
             results = [single_query(x) for x in X_test]
 
+        for (latency,_) in results:
+            # convert from seconds to micros
+            latency_histogram.record_value(latency*1000000.0)
         total_time = sum(time for time, _ in results)
         total_candidates = sum(len(candidates) for _, candidates in results)
         search_time = total_time / len(X_test)
@@ -79,9 +87,13 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         best_search_time = min(best_search_time, search_time)
 
     verbose = hasattr(algo, "query_verbose")
+    search_time_percentiles_usec = {}
+    for percentile in exported_percentiles:
+        search_time_percentiles_usec[percentile]=latency_histogram.get_value_at_percentile(percentile)
     attrs = {
         "batch_mode": batch,
         "best_search_time": best_search_time,
+        "search_time_percentiles_usec": search_time_percentiles_usec,
         "candidates": avg_candidates,
         "expect_extra": verbose,
         "name": str(algo),
