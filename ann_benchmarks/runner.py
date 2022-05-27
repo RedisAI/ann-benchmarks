@@ -10,7 +10,7 @@ import colors
 import docker
 import numpy
 import psutil
-import hdrhistogram
+from hdrh.histogram import HdrHistogram
 
 from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
@@ -26,7 +26,7 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         ((not batch) and hasattr(algo, "prepare_query"))
 
     best_search_time = float('inf')
-    latency_histogram = hdrhistogram.HdrHistogram(1, 60 * 60 * 1000, 2)
+    latency_histogram = HdrHistogram(1, 60 * 60 * 1000, 2)
 
     for i in range(run_count):
         print('Run %d/%d...' % (i + 1, run_count))
@@ -90,6 +90,10 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
     search_time_percentiles_usec = {}
     for percentile in exported_percentiles:
         search_time_percentiles_usec[percentile]=latency_histogram.get_value_at_percentile(percentile)
+    print('Overall percentiles...')
+    for p,v in search_time_percentiles_usec.items():
+        print('\t\tp{}={}'.format(p,v))
+
     attrs = {
         "batch_mode": batch,
         "best_search_time": best_search_time,
