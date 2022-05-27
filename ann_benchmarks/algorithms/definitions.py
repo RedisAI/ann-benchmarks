@@ -12,7 +12,7 @@ from itertools import product
 
 Definition = collections.namedtuple(
     'Definition',
-    ['algorithm', 'constructor', 'module', 'docker_tag',
+    ['algorithm', 'run_group', 'constructor', 'module', 'docker_tag',
      'arguments', 'query_argument_groups', 'disabled'])
 
 
@@ -96,8 +96,20 @@ def get_unique_algorithms(definition_file):
     return list(sorted(algos))
 
 
+def get_run_groups(definition_file, algo = None):
+    definitions = _get_definitions(definition_file)
+    run_groups = set()
+    for point in definitions:
+        for metric in definitions[point]:
+            for algorithm in definitions[point][metric]:
+                if algo == None or algo == algorithm:
+                    for run_group in definitions[point][metric][algorithm]['run-groups'].keys():
+                        run_groups.add(run_group)
+    return list(sorted(run_groups))
+
+
 def get_definitions(definition_file, dimension, point_type="float",
-                    distance_metric="euclidean", count=10):
+                    distance_metric="euclidean", count=10, conn_params={'host': None, 'port': None, 'auth': None, 'user': None, 'cluster': False, 'shards': 1}):
     definitions = _get_definitions(definition_file)
 
     algorithm_definitions = {}
@@ -116,7 +128,7 @@ def get_definitions(definition_file, dimension, point_type="float",
         if "base-args" in algo:
             base_args = algo["base-args"]
 
-        for run_group in algo["run-groups"].values():
+        for run_group_name, run_group in algo["run-groups"].items():
             if "arg-groups" in run_group:
                 groups = []
                 for arg_group in run_group["arg-groups"]:
@@ -157,11 +169,13 @@ def get_definitions(definition_file, dimension, point_type="float",
                 vs = {
                     "@count": count,
                     "@metric": distance_metric,
-                    "@dimension": dimension
+                    "@dimension": dimension,
+                    "@connection": conn_params
                 }
                 aargs = [_substitute_variables(arg, vs) for arg in aargs]
                 definitions.append(Definition(
                     algorithm=name,
+                    run_group = run_group_name,
                     docker_tag=algo['docker-tag'],
                     module=algo['module'],
                     constructor=algo['constructor'],

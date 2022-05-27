@@ -5,6 +5,8 @@ import os
 import threading
 import time
 import traceback
+import inspect
+import h5py
 
 import colors
 import docker
@@ -16,7 +18,7 @@ from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
 from ann_benchmarks.datasets import get_dataset, DATASETS
 from ann_benchmarks.distance import metrics, dataset_transform
-from ann_benchmarks.results import store_results
+from ann_benchmarks.results import get_result_filename, store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count,
@@ -111,7 +113,7 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
     return (attrs, results)
 
 
-def run(definition, dataset, count, run_count, batch):
+def run(definition, dataset, count, run_count, batch, build_only, test_only, num_clients, id):
     algo = instantiate_algorithm(definition)
     assert not definition.query_argument_groups \
            or hasattr(algo, "set_query_arguments"), """\
@@ -124,22 +126,43 @@ function""" % (definition.module, definition.constructor, definition.arguments)
     X_test = numpy.array(D['test'])
     distance = D.attrs['distance']
     print('got a train set of size (%d * %d)' % (X_train.shape[0], dimension))
-    print('got %d queries' % len(X_test))
 
     X_train, X_test = dataset_transform(D)
+
+    hybrid_buckets = None
+    if 'bucket_names' in D.attrs:
+        hybrid_buckets = {}
+        bucket_names = D.attrs['bucket_names']
+        for bucket_name in bucket_names:
+            bucket_dict = {}
+            bucket_dict['ids'] = numpy.array(D[f'{bucket_name}_ids'])
+            bucket_dict['text'] = D[bucket_name]['text'][()]
+            bucket_dict['number'] = D[bucket_name]['number'][()]
+            hybrid_buckets[bucket_name] = bucket_dict
 
     try:
         prepared_queries = False
         if hasattr(algo, "supports_prepared_queries"):
             prepared_queries = algo.supports_prepared_queries()
 
-        t0 = time.time()
-        memory_usage_before = algo.get_memory_usage()
-        algo.fit(X_train)
-        build_time = time.time() - t0
-        index_size = algo.get_memory_usage() - memory_usage_before
-        print('Built index in', build_time)
-        print('Index size: ', index_size)
+        if not test_only:
+            per_client = len(X_train) // num_clients
+            offset = per_client * (id - 1)
+            fit_kwargs = {}
+            if "offset" and "limit" in inspect.getfullargspec(algo.fit)[0]:
+                fit_kwargs['offset']=offset
+                if num_clients != id:
+                    fit_kwargs['limit']=offset + per_client
+            if hybrid_buckets:
+                fit_kwargs['hybrid_buckets']=hybrid_buckets
+
+            t0 = time.time()
+            memory_usage_before = algo.get_memory_usage()
+            algo.fit(X_train, **fit_kwargs)
+            build_time = time.time() - t0
+            index_size = algo.get_memory_usage() - memory_usage_before
+            print('Built index in', build_time)
+            print('Index size: ', index_size)
 
         query_argument_groups = definition.query_argument_groups
         # Make sure that algorithms with no query argument groups still get run
@@ -147,19 +170,37 @@ function""" % (definition.module, definition.constructor, definition.arguments)
         if not query_argument_groups:
             query_argument_groups = [[]]
 
-        for pos, query_arguments in enumerate(query_argument_groups, 1):
-            print("Running query argument group %d of %d..." %
-                  (pos, len(query_argument_groups)))
-            if query_arguments:
-                algo.set_query_arguments(*query_arguments)
-            descriptor, results = run_individual_query(
-                algo, X_train, X_test, distance, count, run_count, batch)
-            descriptor["build_time"] = build_time
-            descriptor["index_size"] = index_size
-            descriptor["algo"] = definition.algorithm
-            descriptor["dataset"] = dataset
-            store_results(dataset, count, definition,
-                          query_arguments, descriptor, results, batch)
+        if not build_only:
+            print('got %d queries' % len(X_test))
+            for pos, query_arguments in enumerate(query_argument_groups, 1):
+                print("Running query argument group %d of %d..." %
+                      (pos, len(query_argument_groups)))
+                if query_arguments:
+                    algo.set_query_arguments(*query_arguments)
+                if hybrid_buckets:
+                    text = hybrid_buckets[D.attrs['selected_bucket']]['text'].decode()
+                    print("setting hybrid text query", text)
+                    algo.set_hybrid_query(text)
+                descriptor, results = run_individual_query(
+                    algo, X_train, X_test, distance, count, run_count, batch)
+                if test_only:
+                    try:
+                        fn = get_result_filename(dataset, count)
+                        fn = os.path.join(fn, definition.algorithm, 'build_stats')
+                        f = h5py.File(fn, 'r')
+                        descriptor["build_time"] = f.attrs["build_time"]
+                        descriptor["index_size"] = f.attrs["index_size"]
+                        f.close()
+                    except:
+                        descriptor["build_time"] = 0
+                        descriptor["index_size"] = 0
+                else:
+                    descriptor["build_time"] = build_time
+                    descriptor["index_size"] = index_size
+                descriptor["algo"] = definition.algorithm
+                descriptor["dataset"] = dataset
+                store_results(dataset, count, definition, query_arguments,
+                              descriptor, results, batch, id)
     finally:
         algo.done()
 
@@ -202,6 +243,14 @@ def run_from_cmdline():
         help='If flag included, algorithms will be run in batch mode, rather than "individual query" mode.',
         action='store_true')
     parser.add_argument(
+        '--build-only',
+        action='store_true',
+        help='building index only, not testing with queries')
+    parser.add_argument(
+        '--test-only',
+        action='store_true',
+        help='querying index only, not building it (should be built first)')
+    parser.add_argument(
         'build',
         help='JSON of arguments to pass to the constructor. E.g. ["angular", 100]'
         )
@@ -224,7 +273,7 @@ def run_from_cmdline():
         query_argument_groups=query_args,
         disabled=False
     )
-    run(definition, args.dataset, args.count, args.runs, args.batch)
+    run(definition, args.dataset, args.count, args.runs, args.batch, args.build_only, args.test_only, 1, 1)
 
 
 def run_docker(definition, dataset, count, runs, timeout, batch, cpu_limit,

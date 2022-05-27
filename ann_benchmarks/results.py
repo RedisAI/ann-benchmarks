@@ -8,7 +8,7 @@ import traceback
 
 
 def get_result_filename(dataset=None, count=None, definition=None,
-                        query_arguments=None, batch_mode=False):
+                        query_arguments=None, batch_mode=False, id=0):
     d = ['results']
     if dataset:
         d.append(dataset)
@@ -17,15 +17,19 @@ def get_result_filename(dataset=None, count=None, definition=None,
     if definition:
         d.append(definition.algorithm + ('-batch' if batch_mode else ''))
         data = definition.arguments + query_arguments
-        d.append(re.sub(r'\W+', '_', json.dumps(data, sort_keys=True))
-                 .strip('_') + ".hdf5")
+        for i in range(len(data)):
+            if isinstance(data[i], dict):
+                data[i] = {k:data[i][k] for k in data[i] if data[i][k] is not None}
+        data.append('client')
+        data.append(id)
+        d.append(re.sub(r'\W+', '_', json.dumps(data, sort_keys=True)).strip('_') + ".hdf5")
     return os.path.join(*d)
 
 
 def store_results(dataset, count, definition, query_arguments, attrs, results,
-                  batch):
+                  batch, id=0):
     fn = get_result_filename(
-        dataset, count, definition, query_arguments, batch)
+        dataset, count, definition, query_arguments, batch, id)
     head, tail = os.path.split(fn)
     if not os.path.isdir(head):
         os.makedirs(head)

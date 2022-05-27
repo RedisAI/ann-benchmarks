@@ -37,7 +37,8 @@ def run_worker(cpu, args, queue):
     while not queue.empty():
         definition = queue.get()
         if args.local:
-            run(definition, args.dataset, args.count, args.runs, args.batch)
+            run(definition, args.dataset, args.count, args.runs, args.batch,
+                args.build_only, args.test_only, args.total_clients, args.client_id)
         else:
             memory_margin = 500e6  # reserve some extra memory for misc stuff
             mem_limit = int((psutil.virtual_memory().available - memory_margin) / args.parallelism)
@@ -72,6 +73,11 @@ def main():
         '--algorithm',
         metavar='NAME',
         help='run only the named algorithm',
+        default=None)
+    parser.add_argument(
+        '--run-group',
+        metavar='NAME',
+        help='run only the named run group',
         default=None)
     parser.add_argument(
         '--docker-tag',
@@ -122,6 +128,56 @@ def main():
         type=positive_int,
         help='Number of Docker containers in parallel',
         default=1)
+    parser.add_argument(
+        '--build-only',
+        action='store_true',
+        help='building index only, not testing with queries')
+    parser.add_argument(
+        '--test-only',
+        action='store_true',
+        help='querying index only, not building it (should be built first)')
+    parser.add_argument(
+        '--cluster',
+        action='store_true',
+        help='working with a cluster')
+    parser.add_argument(
+        '--host',
+        metavar='NAME',
+        help='host name or IP',
+        default=None)
+    parser.add_argument(
+        '--port',
+        type=positive_int,
+        help='the port "host" is listening on',
+        default=None)
+    parser.add_argument(
+        '--auth', '-a',
+        metavar='PASSWORD',
+        help='password for connection',
+        default=None)
+    parser.add_argument(
+        '--user',
+        metavar='NAME',
+        help='user name for connection',
+        default=None)
+    parser.add_argument(
+        '--total-clients',
+        metavar='NUM',
+        type=positive_int,
+        help='total number of clients running in parallel',
+        default=1)
+    parser.add_argument(
+        '--client-id',
+        metavar='NUM',
+        type=positive_int,
+        help='specific client id (among the total clients)',
+        default=1)
+    parser.add_argument(
+        '--shards',
+        type=str,
+        metavar='NUM',
+        default="1",
+        help='specify number of shards')
 
     args = parser.parse_args()
     if args.timeout == -1:
@@ -130,6 +186,16 @@ def main():
     if args.list_algorithms:
         list_algorithms(args.definitions)
         sys.exit(0)
+    
+    if args.build_only and args.test_only:
+        raise Exception('Nothing to run (build only and test only was specified)')
+    if (args.build_only or args.test_only) and not args.local:
+        raise Exception('Can\'t run build or test only on docker')
+
+    conn_params = {'host': args.host, 'port': args.port, 'auth': args.auth, 'user': args.user, 'cluster': args.cluster, 'shards': args.shards}
+
+    if args.total_clients < args.client_id:
+        raise Exception('must satisfy 1 <= client_id <= total_clients')
 
     logging.config.fileConfig("logging.conf")
     logger = logging.getLogger("annb")
@@ -143,7 +209,7 @@ def main():
     point_type = dataset.attrs.get('point_type', 'float')
     distance = dataset.attrs['distance']
     definitions = get_definitions(
-        args.definitions, dimension, point_type, distance, args.count)
+        args.definitions, dimension, point_type, distance, args.count, conn_params)
 
     # Filter out, from the loaded definitions, all those query argument groups
     # that correspond to experiments that have already been run. (This might
@@ -171,8 +237,12 @@ def main():
     random.shuffle(definitions)
 
     if args.algorithm:
-        logger.info(f'running only {args.algorithm}')
+        logger.info(f'running only {args.algorithm} algorithms')
         definitions = [d for d in definitions if d.algorithm == args.algorithm]
+
+    if args.run_group:
+        logger.info(f'running only {args.run_group} run groups')
+        definitions = [d for d in definitions if d.run_group == args.run_group]
 
     if not args.local:
         # See which Docker images we have available
