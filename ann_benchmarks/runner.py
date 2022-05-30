@@ -89,17 +89,16 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         best_search_time = min(best_search_time, search_time)
 
     verbose = hasattr(algo, "query_verbose")
-    search_time_percentiles_usec = {}
+    search_time_percentiles_millis = {}
     for percentile in exported_percentiles:
-        search_time_percentiles_usec[percentile]=latency_histogram.get_value_at_percentile(percentile)
+        search_time_percentiles_millis[str(percentile)]=latency_histogram.get_value_at_percentile(percentile)/1000.0
     print('Overall percentiles...')
-    for p,v in search_time_percentiles_usec.items():
+    for p,v in search_time_percentiles_millis.items():
         print('\t\tp{}={}'.format(p,v))
 
     attrs = {
         "batch_mode": batch,
         "best_search_time": best_search_time,
-        "search_time_percentiles_usec": search_time_percentiles_usec,
         "candidates": avg_candidates,
         "expect_extra": verbose,
         "name": str(algo),
@@ -107,6 +106,8 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         "distance": distance,
         "count": int(count)
     }
+    for k,v in search_time_percentiles_millis.items():
+        attrs["search_time_percentiles_millis_p{}".format(k)] = v
     additional = algo.get_additional()
     for k in additional:
         attrs[k] = additional[k]

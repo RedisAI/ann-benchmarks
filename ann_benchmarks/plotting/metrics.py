@@ -79,8 +79,24 @@ def rel(dataset_distances, run_distances, metrics):
 def queries_per_second(queries, attrs):
     return 1.0 / attrs["best_search_time"]
 
+def percentile(attrs, percentile):
+    k = "search_time_percentiles_millis_p{}".format(percentile)
+    if k in attrs:
+        return attrs[k]
+    else:
+        return float("inf")
+
 def percentile_50(queries, attrs):
-    return attrs["search_time_percentiles_usec"][50.0]/1000.0
+    return percentile(attrs,50.0)
+
+def percentile_95(queries, attrs):
+    return percentile(attrs,95.0)
+
+def percentile_99(queries, attrs):
+    return percentile(attrs,99.0)
+
+def percentile_999(queries, attrs):
+    return percentile(attrs,99.9)
 
 def index_size(queries, attrs):
     # TODO(erikbern): should replace this with peak memory usage or something
@@ -129,6 +145,21 @@ all_metrics = {
     "p50": {
         "description": "Percentile 50 (millis)",
         "function": lambda true_distances, run_distances, metrics, run_attrs: percentile_50(true_distances, run_attrs),  # noqa
+        "worst": float("inf")
+    },
+    "p95": {
+        "description": "Percentile 95 (millis)",
+        "function": lambda true_distances, run_distances, metrics, run_attrs: percentile_95(true_distances, run_attrs),  # noqa
+        "worst": float("inf")
+    },
+    "p99": {
+        "description": "Percentile 99 (millis)",
+        "function": lambda true_distances, run_distances, metrics, run_attrs: percentile_99(true_distances, run_attrs),  # noqa
+        "worst": float("inf")
+    },
+    "p999": {
+        "description": "Percentile 99.9 (millis)",
+        "function": lambda true_distances, run_distances, metrics, run_attrs: percentile_999(true_distances, run_attrs),  # noqa
         "worst": float("inf")
     },
     "distcomps": {
