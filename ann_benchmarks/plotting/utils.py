@@ -45,6 +45,8 @@ def compute_metrics(true_nn_distances, res, metric_1, metric_2,
         algo_name = properties['name']
         # cache distances to avoid access to hdf5 file
         run_distances = numpy.array(run['distances'])
+        # cache times to avoid access to hdf5 file
+        times = numpy.array(run['times'])
         if recompute and 'metrics' in run:
             del run['metrics']
         metrics_cache = get_or_create_metrics(run)
@@ -73,17 +75,46 @@ def compute_all_metrics(true_nn_distances, run, properties, recompute=False):
     results = {}
     # cache distances to avoid access to hdf5 file
     run_distances = numpy.array(run["distances"])
+    # cache times to avoid access to hdf5 file
+    times = numpy.array(run['times'])
     if recompute and 'metrics' in run:
         del run['metrics']
     metrics_cache = get_or_create_metrics(run)
 
     for name, metric in metrics.items():
         v = metric["function"](
-            true_nn_distances, run_distances, metrics_cache, properties)
+            true_nn_distances, run_distances, metrics_cache, times, properties)
         results[name] = v
         if v:
             print('%s: %g' % (name, v))
     return (algo, algo_name, results)
+
+def compute_metrics_all_runs(dataset, res, recompute=False):
+    true_nn_distances=list(dataset['distances'])
+    for i, (properties, run) in enumerate(res):
+        algo = properties['algo']
+        algo_name = properties['name']
+        # cache distances to avoid access to hdf5 file
+        # print('Load distances and times')
+        run_distances = numpy.array(run['distances'])
+        times = numpy.array(run['times'])
+        # print('... done')
+        if recompute and 'metrics' in run:
+            print('Recomputing metrics, clearing cache')
+            del run['metrics']
+        metrics_cache = get_or_create_metrics(run)
+        
+        dataset = properties['dataset']
+
+        run_result = {
+            'algorithm': algo,
+            'parameters': algo_name,
+            'count': properties['count']
+        }
+        for name, metric in metrics.items():
+            v = metric["function"](true_nn_distances, run_distances, metrics_cache, times, properties)
+            run_result[name] = v
+        yield run_result
 
 
 def generate_n_colors(n):
