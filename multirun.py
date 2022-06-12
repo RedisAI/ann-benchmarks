@@ -5,6 +5,7 @@ import json
 from numpy import average
 from redis import Redis
 from redis.cluster import RedisCluster
+from pymilvus import utility, connections
 import h5py
 import os
 from watchdog.observers import Observer
@@ -151,16 +152,19 @@ if __name__ == "__main__":
     os.chdir(workdir)
 
     isredis = True if 'redisearch' in args.algorithm else False
+    ismilvus = True if 'milvus' in args.algorithm else False
 
     if args.host is None:
         args.host = 'localhost'
     if args.port is None:
-        if 'redisearch' in args.algorithm: args.port = '6379'
-        if 'milvus' in args.algorithm: args.port = '19530'
+        if isredis: args.port = '6379'
+        elif ismilvus: args.port = '19530'
 
     if isredis:
         redis = RedisCluster if args.cluster else Redis
         redis = redis(host=args.host, port=int(args.port), password=args.auth, username=args.user)
+    elif ismilvus:
+        connections.connect(host=args.host, port=args.port)
 
     if args.run_group is not None:
         run_groups = [args.run_group]
@@ -204,6 +208,9 @@ if __name__ == "__main__":
     for run_group in run_groups:
         if isredis:
             redis.flushall()
+        elif ismilvus:
+            if utility.has_collection('milvus'):
+                utility.drop_collection('milvus')
 
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
