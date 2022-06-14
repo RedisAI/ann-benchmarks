@@ -3,9 +3,6 @@ import argparse
 import time
 import json
 from numpy import average
-from redis import Redis
-from redis.cluster import RedisCluster
-from pymilvus import utility, connections
 import h5py
 import os
 from watchdog.observers import Observer
@@ -13,6 +10,13 @@ from watchdog.events import PatternMatchingEventHandler
 import pathlib
 from ann_benchmarks.results import get_result_filename
 from ann_benchmarks.algorithms.definitions import get_run_groups
+
+from redis import Redis
+from redis.cluster import RedisCluster
+
+from pymilvus import utility, connections
+
+import pinecone
 
 
 def aggregate_outputs(files, clients):
@@ -153,6 +157,7 @@ if __name__ == "__main__":
 
     isredis = True if 'redisearch' in args.algorithm else False
     ismilvus = True if 'milvus' in args.algorithm else False
+    ispinecone = True if 'pinecone' in args.algorithm else False
 
     if args.host is None:
         args.host = 'localhost'
@@ -165,6 +170,8 @@ if __name__ == "__main__":
         redis = redis(host=args.host, port=int(args.port), password=args.auth, username=args.user)
     elif ismilvus:
         connections.connect(host=args.host, port=args.port)
+    elif ispinecone:
+        pinecone.init(api_key=args.auth)
 
     if args.run_group is not None:
         run_groups = [args.run_group]
@@ -211,6 +218,10 @@ if __name__ == "__main__":
         elif ismilvus:
             if utility.has_collection('milvus'):
                 utility.drop_collection('milvus')
+        elif ispinecone:
+            try:
+                pinecone.delete_index('ann-benchmark')
+            except pinecone.core.client.exceptions.NotFoundException: pass
 
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
