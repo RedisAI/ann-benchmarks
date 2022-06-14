@@ -25,7 +25,7 @@ class Pinecone(BaseANN):
             print(f'inserting vectors {batch[0][0]} to {batch[-1][0]}')
             self.index.upsert(batch)
         
-        print(self.index.describe_index_stats('status'))
+        print(self.index.describe_index_stats())
         print(pinecone.describe_index(self.name))
     
     def query(self, v, n):
