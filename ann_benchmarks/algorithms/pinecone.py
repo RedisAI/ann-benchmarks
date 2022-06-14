@@ -22,11 +22,11 @@ class Pinecone(BaseANN):
         batch_size = min(1000, 2 * 1024 * 1024 // (sys.getsizeof(bulk[-1]))) # bulk[-1] should be the largest (longest name)
 
         for batch in [bulk[i: i+batch_size] for i in range(0, len(bulk), batch_size)]:
-            print(f'inserting vectors {batch[0][0]} to {batch[-1][0]}')
+            # print(f'inserting vectors {batch[0][0]} to {batch[-1][0]}')
             self.index.upsert(batch)
         
-        print(self.index.describe_index_stats())
-        print(pinecone.describe_index(self.name))
+        # print(self.index.describe_index_stats())
+        # print(pinecone.describe_index(self.name))
     
     def query(self, v, n):
         res = self.index.query(v.tolist(), top_k=n)
@@ -34,3 +34,6 @@ class Pinecone(BaseANN):
     
     def freeIndex(self):
         pinecone.delete_index(self.name)
+
+    def __str__(self):
+        return f'Pinecone({pinecone.describe_index(self.name)})'
