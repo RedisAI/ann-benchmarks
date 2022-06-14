@@ -12,6 +12,7 @@ from pymilvus import (
 import numpy
 import sklearn.preprocessing
 from ann_benchmarks.algorithms.base import BaseANN
+import sys
 
 
 class Milvus(BaseANN):
@@ -29,10 +30,13 @@ class Milvus(BaseANN):
                 FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
             ]
             schema = CollectionSchema(fields)
-            self._milvus = Collection('milvus', schema)
-            self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':self._metric, 'params':self._method_params})
+            if utility.has_collection('milvus'):
+                self._milvus = Collection('milvus')
+            else:
+                self._milvus = Collection('milvus', schema)
         except:
             self._milvus = Collection('milvus')
+        print('initialization completed!')
     
     def fit(self, X, offset=0, limit=None):
         limit = limit if limit else len(X)
@@ -40,12 +44,31 @@ class Milvus(BaseANN):
         if self._metric == 'IP':
             X = sklearn.preprocessing.normalize(X)
 
-        self._milvus.insert([[id for id in range(offset, limit)], X.tolist()])
+        X = X.tolist()
+        bulk_size = 1000 * 1024 * 1024 // (sys.getsizeof(X[0])) # approximation for milvus insert limit (1024MB)
+        for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
+            print(f'inserting vectors {offset} to {len(bulk)}')
+            self._milvus.insert([list(range(offset, len(bulk))), bulk])
+            offset += len(bulk)
+
+        if not self._milvus.has_index():
+            print('indexing...', end=' ')
+            try:
+                self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':self._metric, 'params':self._method_params})
+                print('done!')
+            except:
+                print('failed!')
+        
 
     def set_query_arguments(self, param):
         if self._milvus.has_index():
+            print('waiting for index... ', end='')
             if utility.wait_for_index_building_complete('milvus', 'vector'):
+                print('done!')
                 self._milvus.load()
+                print('waiting for data to be loaded... ', end='')
+                utility.wait_for_loading_complete('milvus')
+                print('done!')
             else: raise Exception('index has error')
         else: raise Exception('index is missing')
         if 'IVF_' in self._index_type:
@@ -71,3 +94,6 @@ class Milvus(BaseANN):
 
     def freeIndex(self):
         utility.drop_collection("mlivus")
+
+    def done(self):
+        connections.disconnect('default')
