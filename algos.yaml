@@ -51,6 +51,14 @@ float:
         BS-2^20:
           arg-groups:
             - {"BLOCK_SIZE": 1048576}
+    pinecone:
+      docker-tag: ann-benchmarks-pinecone
+      module: ann_benchmarks.algorithms.pinecone
+      constructor: Pinecone
+      base-args: ["@metric", "@dimension", "@connection"]
+      run-groups:
+        base:
+          args: [['approximated']]
     sptag:
       docker-tag: ann-benchmarks-sptag
       module: ann_benchmarks.algorithms.sptag
