@@ -219,9 +219,8 @@ if __name__ == "__main__":
             if utility.has_collection('milvus'):
                 utility.drop_collection('milvus')
         elif ispinecone:
-            try:
-                pinecone.delete_index('ann-benchmark')
-            except pinecone.core.client.exceptions.NotFoundException: pass
+            for idx in pinecone.list_indexes():
+                pinecone.delete_index(idx)
 
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
