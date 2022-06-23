@@ -157,6 +157,14 @@ function""" % (definition.module, definition.constructor, definition.arguments)
 
         if not build_only:
             print('got %d queries' % len(X_test))
+            per_client = len(X_test) // num_clients
+            offset = per_client * (id - 1)
+            if (num_clients != id):
+                X_test = X_test[offset : offset + per_client]
+            else:
+                X_test = X_test[offset:]
+            print('running %d out of them' % len(X_test))
+            
             for pos, query_arguments in enumerate(query_argument_groups, 1):
                 print("Running query argument group %d of %d..." %
                       (pos, len(query_argument_groups)))
