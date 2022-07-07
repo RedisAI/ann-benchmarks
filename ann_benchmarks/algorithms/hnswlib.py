@@ -21,8 +21,8 @@ class HnswLib(BaseANN):
                           ef_construction=self.method_param["efConstruction"],
                           M=self.method_param["M"])
         data_labels = np.arange(len(X))
-        self.p.add_items(np.asarray(X), data_labels)
         self.p.set_num_threads(1)
+        self.p.add_items(np.asarray(X), data_labels)
 
     def set_query_arguments(self, ef):
         self.p.set_ef(ef)
