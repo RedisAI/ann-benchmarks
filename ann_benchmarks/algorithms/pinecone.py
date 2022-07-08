@@ -3,7 +3,6 @@ from sqlite3 import paramstyle
 from ann_benchmarks.algorithms.base import BaseANN
 import sys
 import pinecone
-import os
 
 class Pinecone(BaseANN):
     def __init__(self, metric, dim, conn_params, type):
@@ -21,7 +20,7 @@ class Pinecone(BaseANN):
 
         bulk = [(str(i), X[i].tolist()) for i in range(offset, limit)]
         # approximation for pinecone insert limit (2MB or 1000 vectors)
-        batch_size = min(10, 2 * 1024 * 1024 // (sys.getsizeof(bulk[-1]))) # bulk[-1] should be the largest (longest name)
+        batch_size = min(1000, 2 * 1024 * 1024 // (sys.getsizeof(bulk[-1]))) # bulk[-1] should be the largest (longest name)
         for batch in [bulk[i: i+batch_size] for i in range(0, len(bulk), batch_size)]:
             # print(f'inserting vectors {batch[0][0]} to {batch[-1][0]}')
             self.index.upsert(batch)
