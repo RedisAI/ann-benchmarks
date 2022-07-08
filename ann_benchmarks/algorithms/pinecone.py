@@ -6,7 +6,7 @@ import pinecone
 
 class Pinecone(BaseANN):
     def __init__(self, metric, dim, conn_params, type):
-        pinecone.init(api_key=conn_params['auth'])
+        pinecone.init(api_key=conn_params['auth'], project_name=conn_params['project_name'], environment=conn_params['environment'])
         m = {'angular': 'cosine', 'euclidean': 'euclidean'}[metric]
         self.name = 'ann-benchmark'
         if self.name not in pinecone.list_indexes():
