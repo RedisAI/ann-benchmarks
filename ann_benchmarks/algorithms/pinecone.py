@@ -3,10 +3,14 @@ from sqlite3 import paramstyle
 from ann_benchmarks.algorithms.base import BaseANN
 import sys
 import pinecone
+import os
+
+PINECONE_PROJECT_NAME = os.getenv("PINECONE_PROJECT_NAME",None)
+PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT",None)
 
 class Pinecone(BaseANN):
     def __init__(self, metric, dim, conn_params, type):
-        pinecone.init(api_key=conn_params['auth'], project_name=conn_params['project_name'], environment=conn_params['environment'])
+        pinecone.init(api_key=conn_params['auth'], project_name=PINECONE_PROJECT_NAME, environment=PINECONE_ENVIRONMENT)
         m = {'angular': 'cosine', 'euclidean': 'euclidean'}[metric]
         self.name = 'ann-benchmark'
         if self.name not in pinecone.list_indexes():
