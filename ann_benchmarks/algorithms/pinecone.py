@@ -14,6 +14,7 @@ class Pinecone(BaseANN):
             pinecone.create_index(self.name, dimension=dim, metric=m,
                                   index_type=type, shards=int(conn_params["shards"]), )
         self.index = pinecone.Index(self.name)
+        print(self.index.describe_index_stats())
 
     def fit(self, X, offset=0, limit=None):
         limit = limit if limit else len(X)
