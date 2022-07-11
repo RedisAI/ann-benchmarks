@@ -42,31 +42,36 @@ class ElasticsearchScriptScoreQuery(BaseANN):
     - Dense vector queries: https://www.elastic.co/guide/en/elasticsearch/reference/master/query-dsl-script-score-query.html
     """
 
-    def __init__(self, metric: str, dimension: int):
-        self.name = f"elasticsearch-script-score-query_metric={metric}_dimension={dimension}"
-        self.metric = metric
+    def __init__(self, metric: str, dimension: int, method_param):
+        self.name = f"elasticsearch-script-score-query_metric={metric}_dimension={dimension}_params{method_param}"
+        self.metric = {"euclidean": 'l2_norm', "angular": 'cosine'}[metric]
+        self.method_param = method_param
         self.dimension = dimension
         self.index = f"es-ssq-{metric}-{dimension}"
         self.es = Elasticsearch(["http://localhost:9200"])
         self.batch_res = []
-        if self.metric == "euclidean":
-            self.script = "1 / (1 + l2norm(params.query_vec, \"vec\"))"
-        elif self.metric == "angular":
-            self.script = "1.0 + cosineSimilarity(params.query_vec, \"vec\")"
-        else:
-            raise NotImplementedError(f"Not implemented for metric {self.metric}")
         es_wait()
 
     def fit(self, X):
-        body = dict(settings=dict(number_of_shards=1, number_of_replicas=0))
-        mapping = dict(
+        mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
-                vec=dict(type="dense_vector", dims=self.dimension)
+                vec=dict(
+                    type="dense_vector",
+                    dims=self.dimension,
+                    similarity=self.metric,
+                    index=True,
+                    index_options=self.method_param
+                )
             )
         )
-        self.es.indices.create(self.index, body=body)
-        self.es.indices.put_mapping(mapping, self.index)
+        if self.es.indices.exists(index=self.index):
+            print('deleteing...', end=' ')
+            self.es.indices.delete(index=self.index)
+            print('done!')
+        self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
+
+        # self.es.indices.put_mapping(properties=properties, index=self.index)
 
         def gen():
             for i, vec in enumerate(X):
@@ -75,23 +80,16 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
         assert len(errors) == 0, errors
 
-        self.es.indices.refresh(self.index)
-        self.es.indices.forcemerge(self.index, max_num_segments=1)
+        self.es.indices.refresh(index=self.index)
+        self.es.indices.forcemerge(index=self.index, max_num_segments=1)
+
+    def set_query_arguments(self, ef):
+        self.ef = ef
 
     def query(self, q, n):
-        body = dict(
-            query=dict(
-                script_score=dict(
-                    query=dict(match_all=dict()),
-                    script=dict(
-                        source=self.script,
-                        params=dict(query_vec=q.tolist())
-                    )
-                )
-            )
-        )
-        res = self.es.search(index=self.index, body=body, size=n, _source=False, docvalue_fields=['id'],
-                             stored_fields="_none_", filter_path=["hits.hits.fields.id"])
+        knn = dict(field='vec', query_vector=q.tolist(), k=n, num_candidates=self.ef)
+        res = self.es.knn_search(index=self.index, knn=knn, source=False, docvalue_fields=['id'],
+                                 stored_fields="_none_", filter_path=["hits.hits.fields.id"])
         return [int(h['fields']['id'][0]) - 1 for h in res['hits']['hits']]
 
     def batch_query(self, X, n):
