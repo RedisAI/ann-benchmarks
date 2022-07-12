@@ -966,7 +966,7 @@ float:
       docker-tag: ann-benchmarks-elasticsearch
       module: ann_benchmarks.algorithms.elasticsearch
       constructor: ElasticsearchScriptScoreQuery
-      base-args: [ "@metric", "@dimension" ]
+      base-args: [ "@metric", "@dimension", "@connection" ]
       run-groups:
         M-4:
           arg-groups:
