@@ -7,7 +7,7 @@ from time import sleep
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, ConnectionTimeout, BadRequestError
 from elasticsearch.helpers import bulk
 
 from ann_benchmarks.algorithms.base import BaseANN
@@ -20,9 +20,9 @@ logging.getLogger("elasticsearch").setLevel(logging.WARN)
 # logging.basicConfig(level=logging.INFO)
 # logging.getLogger("elasticsearch").setLevel(logging.INFO)
 
-def es_wait():
+def es_wait(baseurl):
     print("Waiting for elasticsearch health endpoint...")
-    req = Request("http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s")
+    req = Request(f"{baseurl}/_cluster/health?wait_for_status=yellow&timeout=1s")
     for i in range(30):
         try:
             res = urlopen(req)
@@ -42,17 +42,31 @@ class ElasticsearchScriptScoreQuery(BaseANN):
     - Dense vector queries: https://www.elastic.co/guide/en/elasticsearch/reference/master/query-dsl-script-score-query.html
     """
 
-    def __init__(self, metric: str, dimension: int, method_param):
+    def __init__(self, metric: str, dimension: int, conn_params, method_param):
         self.name = f"elasticsearch-script-score-query_metric={metric}_dimension={dimension}_params{method_param}"
         self.metric = {"euclidean": 'l2_norm', "angular": 'cosine'}[metric]
         self.method_param = method_param
         self.dimension = dimension
+        self.timeout = 60 * 60
+        h = conn_params['host'] if conn_params['host'] is not None else 'localhost'
+        p = conn_params['port'] if conn_params['port'] is not None else '9200'
+        self.url = f"http://{h}:{p}"
         self.index = f"es-ssq-{metric}-{dimension}"
-        self.es = Elasticsearch(["http://localhost:9200"])
+        self.es = Elasticsearch([self.url])
         self.batch_res = []
-        es_wait()
+        es_wait(self.url)
 
     def fit(self, X):
+        def wait_for_readiness():
+            ready = False
+            for i in range(self.timeout):
+                stats = self.es.indices.stats(index=self.index)
+                if stats['_shards']['total'] == stats['_shards']['successful']:
+                    ready = True
+                    break
+                sleep(1)
+            return ready
+    
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
@@ -65,11 +79,13 @@ class ElasticsearchScriptScoreQuery(BaseANN):
                 )
             )
         )
-        if self.es.indices.exists(index=self.index):
-            print('deleteing...', end=' ')
-            self.es.indices.delete(index=self.index)
-            print('done!')
-        self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
+        try:
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0), timeout=f'{self.timeout}m')
+        except ConnectionTimeout as e:
+            if not wait_for_readiness():
+                raise e
+        except BadRequestError as e:
+            if 'resource_already_exists_exception' not in e.message: raise e
 
         # self.es.indices.put_mapping(properties=properties, index=self.index)
 
@@ -80,8 +96,13 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
         assert len(errors) == 0, errors
 
-        self.es.indices.refresh(index=self.index)
-        self.es.indices.forcemerge(index=self.index, max_num_segments=1)
+        try:
+            self.es.indices.refresh(index=self.index)
+        except ConnectionTimeout as e:
+            if not wait_for_readiness():
+                raise e
+            self.es.indices.refresh(index=self.index)
+        # self.es.indices.forcemerge(index=self.index, max_num_segments=1)
 
     def set_query_arguments(self, ef):
         self.ef = ef
