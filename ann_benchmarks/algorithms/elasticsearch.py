@@ -51,9 +51,13 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         self.timeout = 60 * 60
         h = conn_params['host'] if conn_params['host'] is not None else 'localhost'
         p = conn_params['port'] if conn_params['port'] is not None else '9200'
-        self.url = f"https://{h}:{p}"
+        u = conn_params['user'] if conn_params['user'] is not None else 'elastic'
+        a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
-        self.es = Elasticsearch(self.url, request_timeout=self.timeout, basic_auth=(conn_params['user'], conn_params['auth']), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
+        try:
+            self.es = Elasticsearch(f"http://{h}:{p}",  request_timeout=self.timeout, basic_auth=(u, a), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
+        except Exception:
+            self.es = Elasticsearch(f"https://{h}:{p}", request_timeout=self.timeout, basic_auth=(u, a), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
         self.batch_res = []
         es_wait(self.es)
 

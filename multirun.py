@@ -186,7 +186,10 @@ if __name__ == "__main__":
     elif iselastic:
         args.user = args.user if args.user is not None else 'elastic'
         args.auth = args.auth if args.auth is not None else os.environ.get('ELASTIC_PASSWORD', '')
-        es = Elasticsearch([f'https://{args.host}:{args.port}'], request_timeout=3600, basic_auth=(args.user, args.auth), ca_certs=os.environ.get('ELASTIC_CA', DEFAULT))
+        try:
+            es = Elasticsearch([f'http://{args.host}:{args.port}'],  request_timeout=3600, basic_auth=(args.user, args.auth), ca_certs=os.environ.get('ELASTIC_CA', DEFAULT))
+        except Exception:
+            es = Elasticsearch([f'https://{args.host}:{args.port}'], request_timeout=3600, basic_auth=(args.user, args.auth), ca_certs=os.environ.get('ELASTIC_CA', DEFAULT))
 
     if args.run_group is not None:
         run_groups = [args.run_group]
