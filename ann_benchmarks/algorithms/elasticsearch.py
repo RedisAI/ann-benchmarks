@@ -4,11 +4,13 @@ Note that this requires X-Pack, which is not included in the OSS version of Elas
 """
 import logging
 from time import sleep
+from os import environ
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from elasticsearch import Elasticsearch, ConnectionTimeout, BadRequestError
 from elasticsearch.helpers import bulk
+from elastic_transport.client_utils import DEFAULT
 
 from ann_benchmarks.algorithms.base import BaseANN
 
@@ -20,19 +22,18 @@ logging.getLogger("elasticsearch").setLevel(logging.WARN)
 # logging.basicConfig(level=logging.INFO)
 # logging.getLogger("elasticsearch").setLevel(logging.INFO)
 
-def es_wait(baseurl):
+def es_wait(es):
     print("Waiting for elasticsearch health endpoint...")
-    req = Request(f"{baseurl}/_cluster/health?wait_for_status=yellow&timeout=1s")
     for i in range(30):
         try:
-            res = urlopen(req)
-            if res.getcode() == 200:
+            res = es.cluster.health(wait_for_status='yellow', timeout='1s')
+            if not res['timed_out']: # then status is OK
                 print("Elasticsearch is ready")
                 return
         except URLError:
             pass
         sleep(1)
-    raise RuntimeError("Failed to connect to local elasticsearch")
+    raise RuntimeError("Failed to connect to elasticsearch server")
 
 
 class ElasticsearchScriptScoreQuery(BaseANN):
@@ -50,11 +51,11 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         self.timeout = 60 * 60
         h = conn_params['host'] if conn_params['host'] is not None else 'localhost'
         p = conn_params['port'] if conn_params['port'] is not None else '9200'
-        self.url = f"http://{h}:{p}"
+        self.url = f"https://{h}:{p}"
         self.index = "ann_benchmark"
-        self.es = Elasticsearch([self.url], request_timeout=self.timeout)
+        self.es = Elasticsearch(self.url, request_timeout=self.timeout, basic_auth=(conn_params['user'], conn_params['auth']), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
         self.batch_res = []
-        es_wait(self.url)
+        es_wait(self.es)
 
     def fit(self, X):
         def wait_for_readiness():
