@@ -11,15 +11,6 @@ import pathlib
 from ann_benchmarks.results import get_result_filename
 from ann_benchmarks.algorithms.definitions import get_run_groups
 
-from redis import Redis
-from redis.cluster import RedisCluster
-
-from pymilvus import utility, connections
-
-import pinecone
-
-from elasticsearch import Elasticsearch
-
 
 def aggregate_outputs(files, clients):
     different_attrs = set([f.split('client')[0] for f in files])
@@ -157,10 +148,26 @@ if __name__ == "__main__":
     print("Changing the workdir to {}".format(workdir))
     os.chdir(workdir)
 
-    isredis = 'redisearch' in args.algorithm
-    ismilvus = 'milvus' in args.algorithm
-    ispinecone = 'pinecone' in args.algorithm
-    iselastic = 'elasticsearch' in args.algorithm
+    # All supported algorithms that need spacial stuff
+    isredis = ismilvus = ispinecone = iselastic = False
+
+    if 'redisearch' in args.algorithm:
+        from redis import Redis
+        from redis.cluster import RedisCluster
+        isredis = True
+
+    elif 'milvus' in args.algorithm:
+        from pymilvus import utility, connections
+        ismilvus = True
+
+    elif 'pinecone' in args.algorithm:
+        import pinecone
+        ispinecone = True
+
+    elif 'elasticsearch' in args.algorithm:
+        from elasticsearch import Elasticsearch
+        from elastic_transport.client_utils import DEFAULT
+        iselastic = True
 
     if args.host is None:
         args.host = 'localhost'
@@ -177,7 +184,9 @@ if __name__ == "__main__":
     elif ispinecone:
         pinecone.init(api_key=args.auth)
     elif iselastic:
-        es = Elasticsearch([f'http://{args.host}:{args.port}'], request_timeout=3600)
+        args.user = args.user if args.user is not None else 'elastic'
+        args.auth = args.auth if args.auth is not None else os.environ.get('ELASTIC_PASSWORD', '')
+        es = Elasticsearch([f'https://{args.host}:{args.port}'], request_timeout=3600, basic_auth=(args.user, args.auth), ca_certs=os.environ.get('ELASTIC_CA', DEFAULT))
 
     if args.run_group is not None:
         run_groups = [args.run_group]
