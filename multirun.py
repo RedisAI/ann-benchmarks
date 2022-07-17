@@ -18,6 +18,8 @@ from pymilvus import utility, connections
 
 import pinecone
 
+from elasticsearch import Elasticsearch
+
 
 def aggregate_outputs(files, clients):
     different_attrs = set([f.split('client')[0] for f in files])
@@ -155,15 +157,17 @@ if __name__ == "__main__":
     print("Changing the workdir to {}".format(workdir))
     os.chdir(workdir)
 
-    isredis = True if 'redisearch' in args.algorithm else False
-    ismilvus = True if 'milvus' in args.algorithm else False
-    ispinecone = True if 'pinecone' in args.algorithm else False
+    isredis = 'redisearch' in args.algorithm
+    ismilvus = 'milvus' in args.algorithm
+    ispinecone = 'pinecone' in args.algorithm
+    iselastic = 'elasticsearch' in args.algorithm
 
     if args.host is None:
         args.host = 'localhost'
     if args.port is None:
         if isredis: args.port = '6379'
         elif ismilvus: args.port = '19530'
+        elif iselastic: args.port = '9200'
 
     if isredis:
         redis = RedisCluster if args.cluster else Redis
@@ -172,6 +176,8 @@ if __name__ == "__main__":
         connections.connect(host=args.host, port=args.port)
     elif ispinecone:
         pinecone.init(api_key=args.auth)
+    elif iselastic:
+        es = Elasticsearch([f'http://{args.host}:{args.port}'], request_timeout=3600)
 
     if args.run_group is not None:
         run_groups = [args.run_group]
@@ -221,6 +227,9 @@ if __name__ == "__main__":
         elif ispinecone:
             for idx in pinecone.list_indexes():
                 pinecone.delete_index(idx)
+        elif iselastic:
+            for idx in es.indices.stats()['indices']:
+                es.indices.delete(index=idx)
 
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
@@ -245,6 +254,8 @@ if __name__ == "__main__":
                 if not args.cluster:  # TODO: get total size from all the shards
                     index_size = float(redis.ft('ann_benchmark').info()['vector_index_sz_mb']) * 1024
                 f.attrs["index_size"] = index_size
+            elif iselastic:
+                f.attrs["index_size"] = es.indices.stats(index='ann_benchmark')['indices']['ann_benchmark']['total']['store']['size_in_bytes']
             f.close()
             results_dict["build"] = {"total_clients": args.build_clients, "build_time": total_time,
                                      "vector_index_sz_mb": index_size}

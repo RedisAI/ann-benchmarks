@@ -51,8 +51,8 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         h = conn_params['host'] if conn_params['host'] is not None else 'localhost'
         p = conn_params['port'] if conn_params['port'] is not None else '9200'
         self.url = f"http://{h}:{p}"
-        self.index = f"es-ssq-{metric}-{dimension}"
-        self.es = Elasticsearch([self.url])
+        self.index = "ann_benchmark"
+        self.es = Elasticsearch([self.url], request_timeout=self.timeout)
         self.batch_res = []
         es_wait(self.url)
 
@@ -91,7 +91,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
         def gen():
             for i, vec in enumerate(X):
-                yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i + 1) }
+                yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i) }
 
         (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
         assert len(errors) == 0, errors
@@ -102,7 +102,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             if not wait_for_readiness():
                 raise e
             self.es.indices.refresh(index=self.index)
-        # self.es.indices.forcemerge(index=self.index, max_num_segments=1)
+        self.es.indices.forcemerge(index=self.index, max_num_segments=1)
 
     def set_query_arguments(self, ef):
         self.ef = ef
@@ -111,7 +111,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         knn = dict(field='vec', query_vector=q.tolist(), k=n, num_candidates=self.ef)
         res = self.es.knn_search(index=self.index, knn=knn, source=False, docvalue_fields=['id'],
                                  stored_fields="_none_", filter_path=["hits.hits.fields.id"])
-        return [int(h['fields']['id'][0]) - 1 for h in res['hits']['hits']]
+        return [int(h['fields']['id'][0]) for h in res['hits']['hits']]
 
     def batch_query(self, X, n):
         self.batch_res = [self.query(q, n) for q in X]
