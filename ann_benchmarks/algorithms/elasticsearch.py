@@ -55,8 +55,10 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         u = conn_params['user'] if conn_params['user'] is not None else 'elastic'
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
+        # we need both retry on status and retry on timeout to auto-retry until max_retries
+        # check https://github.com/elastic/elasticsearch-py/issues/1004
         self.es = Elasticsearch(f"{h}:{p}", basic_auth=(u, a),
-                                ca_certs=environ.get('ELASTIC_CA', DEFAULT), timeout=180, max_retries=10, retry_on_timeout=True)
+                                ca_certs=environ.get('ELASTIC_CA', DEFAULT), timeout=180, max_retries=10,retry_on_timeout=True, retry_on_status=True)
         self.batch_res = []
         es_wait(self.es)
         self.check_index_does_not_exist()
@@ -95,6 +97,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         def gen():
             for i, vec in enumerate(X):
                 yield {"_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i)}
+
 
         (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=10)
         assert len(errors) == 0, errors
