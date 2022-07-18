@@ -8,6 +8,7 @@ from os import environ
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+import elastic_transport
 import elasticsearch
 from elasticsearch import Elasticsearch, ConnectionTimeout, BadRequestError
 from elasticsearch.helpers import bulk
@@ -99,8 +100,17 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             for i, vec in enumerate(X):
                 yield {"_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i)}
 
+        try_count = 0
+        max_retries = 10
+        res = False
+        while res is False and try_count < max_retries:
+            try:
+                try_count = try_count + 1
+                (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=max_retries)
+                res = True
+            except elastic_transport.ConnectionTimeout:
+                print("got an timeout on bulk insert. try {} of {}".format(try_count, max_retries))
 
-        (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=10)
         assert len(errors) == 0, errors
 
     def create_index(self):
