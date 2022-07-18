@@ -119,7 +119,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         print("\tIndex properties {}".format(mappings))
         try:
             self.es.indices.create(index=self.index, mappings=mappings,
-                                   settings=dict(number_of_shards=1, number_of_replicas=0), timeout=f'{self.timeout}m')
+                                   settings=dict(number_of_shards=1, number_of_replicas=0), timeout=f'{self.timeout}m', max_retries=10)
         except ConnectionTimeout as e:
             if not self.wait_for_readiness():
                 raise e
