@@ -147,7 +147,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def freeIndex(self):
         print("Deleting elastic index named {}".format(self.index))
-        self.es.indices.delete(index=self.index)
+        self.es.indices.delete(index=self.index, max_retries=10)
         print("Finished deleting elastic index named {}".format(self.index))
 
     def check_index_does_not_exist(self):
