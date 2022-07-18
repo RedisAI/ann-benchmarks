@@ -124,7 +124,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             if 'resource_already_exists_exception' not in e.message:
                 raise e
         print("Setting refresh interval to 60 seconds")
-        self.update_refresh_interval(60)
+        self.update_refresh_interval("60s")
 
     def set_query_arguments(self, ef):
         self.ef = ef
