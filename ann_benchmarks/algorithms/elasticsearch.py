@@ -148,7 +148,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def check_index_does_not_exist(self):
         print("Checking if index named {} exists.".format(self.index))
-        res = self.es.indices.get_alias(name=self.index)
+        res = self.es.indices.get_alias(index=self.index)
         print("Indices: {}".format(res))
         if self.index in res.keys():
             print("Detected index. deleting it...")
