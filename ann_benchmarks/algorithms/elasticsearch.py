@@ -8,6 +8,7 @@ from os import environ
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+import elasticsearch
 from elasticsearch import Elasticsearch, ConnectionTimeout, BadRequestError
 from elasticsearch.helpers import bulk
 from elastic_transport.client_utils import DEFAULT
@@ -152,10 +153,15 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def check_index_does_not_exist(self):
         print("Checking if index named {} exists.".format(self.index))
-        res = self.es.indices.get_alias(index=self.index)
-        print("Indices: {}".format(res))
-        if self.index in res.keys():
-            print("Detected index. deleting it...")
-            self.freeIndex()
-        else:
+        try:
+            res = self.es.indices.get_alias(index=self.index)
+            print("Indices: {}".format(res))
+            if self.index in res.keys():
+                print("Detected index. deleting it...")
+                self.freeIndex()
+            else:
+                print("No index detected.")
+        except elasticsearch.NotFoundError:
             print("No index detected.")
+            pass
+
