@@ -113,7 +113,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         print("Creating elastic index named {}".format(self.index))
-        print("\t\tIndex properties {}".format(mappings))
+        print("\tIndex properties {}".format(mappings))
         try:
             self.es.indices.create(index=self.index, mappings=mappings,
                                    settings=dict(number_of_shards=1, number_of_replicas=0), timeout=f'{self.timeout}m')
