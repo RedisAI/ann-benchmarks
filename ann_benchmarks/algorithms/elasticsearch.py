@@ -110,6 +110,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
                 res = True
             except elastic_transport.ConnectionTimeout:
                 print("got an timeout on bulk insert. try {} of {}".format(try_count, max_retries))
+                pass
 
         assert len(errors) == 0, errors
 
