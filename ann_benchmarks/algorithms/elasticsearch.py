@@ -101,8 +101,9 @@ class ElasticsearchScriptScoreQuery(BaseANN):
                 yield {"_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i)}
 
         try_count = 0
-        max_retries = 10
+        max_retries = 60
         res = False
+        errors = []
         while res is False and try_count < max_retries:
             try:
                 try_count = try_count + 1
