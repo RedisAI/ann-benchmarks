@@ -56,7 +56,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
         self.es = Elasticsearch(f"{h}:{p}", request_timeout=self.timeout, basic_auth=(u, a),
-                                ca_certs=environ.get('ELASTIC_CA', DEFAULT))
+                                ca_certs=environ.get('ELASTIC_CA', DEFAULT), timeout=180, max_retries=10, retry_on_timeout=True)
         self.batch_res = []
         es_wait(self.es)
         self.check_index_does_not_exist()
@@ -80,9 +80,13 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def update_refresh_interval(self, new_refresh_interval):
         previous_settings = self.es.indices.get_settings(index=self.index)
-        current_refresh_interval = previous_settings[self.index]['settings']['index']['refresh_interval']
+        current_refresh_interval = "default one"
+        try:
+            current_refresh_interval = previous_settings[self.index]['settings']['index']['refresh_interval']
+        except KeyError:
+            pass
         print("Altering index refresh interval from {} to {}".format(
-            new_refresh_interval, current_refresh_interval))
+            current_refresh_interval, new_refresh_interval ))
         self.es.indices.put_settings(index=self.index, settings={
             "index.refresh_interval": new_refresh_interval
         })
@@ -92,7 +96,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             for i, vec in enumerate(X):
                 yield {"_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i)}
 
-        (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
+        (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=10)
         assert len(errors) == 0, errors
 
     def create_index(self):
@@ -144,7 +148,9 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def check_index_does_not_exist(self):
         print("Checking if index named {} exists.".format(self.index))
-        if self.index in self.es.indices.get_alias("*"):
+        res = self.es.indices.get_alias("*")
+        print("Indices: {}".format(res))
+        if self.index in res:
             print("Detected index. deleting it...")
             self.freeIndex()
         else:
