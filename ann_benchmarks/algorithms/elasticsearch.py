@@ -55,7 +55,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         u = conn_params['user'] if conn_params['user'] is not None else 'elastic'
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
-        self.es = Elasticsearch(f"{h}:{p}", request_timeout=self.timeout, basic_auth=(u, a),
+        self.es = Elasticsearch(f"{h}:{p}", basic_auth=(u, a),
                                 ca_certs=environ.get('ELASTIC_CA', DEFAULT), timeout=180, max_retries=10, retry_on_timeout=True)
         self.batch_res = []
         es_wait(self.es)
