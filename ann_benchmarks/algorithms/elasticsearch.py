@@ -6,9 +6,8 @@ import logging
 from time import sleep
 from os import environ
 from urllib.error import URLError
-from urllib.request import Request, urlopen
 
-from elasticsearch import Elasticsearch, ConnectionTimeout, BadRequestError
+from elasticsearch import Elasticsearch, BadRequestError
 from elasticsearch.helpers import bulk
 from elastic_transport.client_utils import DEFAULT
 
@@ -55,23 +54,14 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
         try:
-            self.es = Elasticsearch(f"http://{h}:{p}",  request_timeout=self.timeout, basic_auth=(u, a), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
+            self.es = Elasticsearch(f"http://{h}:{p}",  request_timeout=self.timeout, basic_auth=(u, a), refresh_interval=-1)
+            self.es.info()
         except Exception:
             self.es = Elasticsearch(f"https://{h}:{p}", request_timeout=self.timeout, basic_auth=(u, a), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
         self.batch_res = []
         es_wait(self.es)
 
     def fit(self, X):
-        def wait_for_readiness():
-            ready = False
-            for i in range(self.timeout):
-                stats = self.es.indices.stats(index=self.index)
-                if stats['_shards']['total'] == stats['_shards']['successful']:
-                    ready = True
-                    break
-                sleep(1)
-            return ready
-    
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
@@ -85,14 +75,9 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         try:
-            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0), timeout=f'{self.timeout}m')
-        except ConnectionTimeout as e:
-            if not wait_for_readiness():
-                raise e
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
-
-        # self.es.indices.put_mapping(properties=properties, index=self.index)
 
         def gen():
             for i, vec in enumerate(X):
@@ -101,12 +86,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
         assert len(errors) == 0, errors
 
-        try:
-            self.es.indices.refresh(index=self.index)
-        except ConnectionTimeout as e:
-            if not wait_for_readiness():
-                raise e
-            self.es.indices.refresh(index=self.index)
+        self.es.indices.refresh(index=self.index)
         self.es.indices.forcemerge(index=self.index, max_num_segments=1)
 
     def set_query_arguments(self, ef):
