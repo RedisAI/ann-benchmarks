@@ -107,12 +107,9 @@ algorithm instantiated from it does not implement the set_query_arguments \
 function""" % (definition.module, definition.constructor, definition.arguments)
 
     D, dimension = get_dataset(dataset)
-    X_train = numpy.array(D['train'])
-    X_test = numpy.array(D['test'])
+    X_train, X_test = dataset_transform(D)
     distance = D.attrs['distance']
     print('got a train set of size (%d * %d)' % (X_train.shape[0], dimension))
-
-    X_train, X_test = dataset_transform(D)
 
     hybrid_buckets = None
     if 'bucket_names' in D.attrs:
