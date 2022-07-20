@@ -232,23 +232,23 @@ if __name__ == "__main__":
         observer.start()
 
     for run_group in run_groups:
-        if isredis:
-            redis.flushall()
-        elif ismilvus:
-            if utility.has_collection('milvus'):
-                utility.drop_collection('milvus')
-        elif ispinecone:
-            for idx in pinecone.list_indexes():
-                pinecone.delete_index(idx)
-        elif iselastic:
-            for idx in es.indices.stats()['indices']:
-                es.indices.delete(index=idx)
-
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
         curr_base_test = base_test + ' --run-group ' + run_group
 
         if int(args.build_clients) > 0:
+            if isredis:
+                redis.flushall()
+            elif ismilvus:
+                if utility.has_collection('milvus'):
+                    utility.drop_collection('milvus')
+            elif ispinecone:
+                for idx in pinecone.list_indexes():
+                    pinecone.delete_index(idx)
+            elif iselastic:
+                for idx in es.indices.stats()['indices']:
+                    es.indices.delete(index=idx)
+
             clients = [Process(target=os.system, args=(curr_base_build + ' --client-id ' + str(i),)) for i in
                        range(1, int(args.build_clients) + 1)]
 
