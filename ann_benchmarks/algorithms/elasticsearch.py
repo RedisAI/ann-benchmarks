@@ -87,7 +87,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             def gen():
                 for i, vec in enumerate(bulk_array):
                     yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
-            (_, errors) = bulk(self.es, gen, chunk_size=bulk_size, max_retries=9)
+            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9)
             assert len(errors) == 0, errors
 
         print('refreshing elastic index...')
