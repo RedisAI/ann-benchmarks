@@ -63,8 +63,6 @@ class ElasticsearchScriptScoreQuery(BaseANN):
 
     def fit(self, X, offset=0, limit=None):
         limit = limit if limit else len(X)
-        X = X[offset:limit]
-        X = X.tolist()
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
@@ -85,6 +83,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
             print(f'inserting vectors {offset} to {len(bulk)}')
             offset += len(bulk)
+            print(bulk[0])
             def gen():
                 for i, vec in enumerate(bulk):
                     yield { "_op_type": "index", "_index": self.index, "vec": vec, 'id': str(offset+i) }
