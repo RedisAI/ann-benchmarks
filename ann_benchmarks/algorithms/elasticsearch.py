@@ -64,6 +64,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
     def fit(self, X, offset=0, limit=None):
         limit = limit if limit else len(X)
         X = X[offset:limit]
+        X = X.tolist()
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
