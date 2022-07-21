@@ -78,7 +78,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             if 'resource_already_exists_exception' not in e.message: raise e
         bulk_size = 500
         for bulk_array in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
-            print(f'inserting vectors {offset} to {len(bulk_array)}')
+            print(f'inserting vectors {offset} to {offset+len(bulk_array)}')
             offset += len(bulk_array)
 
             def gen():
