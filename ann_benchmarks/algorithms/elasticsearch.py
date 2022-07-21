@@ -61,7 +61,9 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         self.batch_res = []
         es_wait(self.es)
 
-    def fit(self, X):
+    def fit(self, X, offset=0, limit=None):
+        limit = limit if limit else len(X)
+        X = X[offset:limit]
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
@@ -78,16 +80,19 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
+        bulk_size = 500
+        for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
+            print(f'inserting vectors {offset} to {len(bulk)}')
+            offset += len(bulk)
+            def gen():
+                for i, vec in enumerate(X):
+                    yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
+            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9)
+            assert len(errors) == 0, errors
 
-        def gen():
-            for i, vec in enumerate(X):
-                yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i) }
-
-        (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
-        assert len(errors) == 0, errors
-
+        print('refreshing elastic index...')
         self.es.indices.refresh(index=self.index)
-        self.es.indices.forcemerge(index=self.index, max_num_segments=1)
+        print('finished refreshing elastic index...')
 
     def set_query_arguments(self, ef):
         self.ef = ef
