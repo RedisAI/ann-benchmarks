@@ -109,3 +109,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
     def get_batch_results(self):
         return self.batch_res
 
+    def freeIndex(self):
+        print("Deleting elastic index named {}".format(self.index))
+        self.es.indices.delete(index=self.index)
+        print("Finished deleting elastic index named {}".format(self.index))
