@@ -84,10 +84,11 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             print(f'inserting vectors {offset} to {len(bulk)}')
             offset += len(bulk)
             # print(bulk[0])
-            def gen():
-                for i, vec in enumerate(bulk):
-                    yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
-            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9)
+            operations = []
+            # def gen():
+            for i, vec in enumerate(bulk):
+                operations.append( { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) })
+            (_, errors) = bulk(self.es, operations, chunk_size=bulk_size, max_retries=9)
             assert len(errors) == 0, errors
 
         print('refreshing elastic index...')
