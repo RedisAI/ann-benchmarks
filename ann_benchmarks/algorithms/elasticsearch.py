@@ -53,6 +53,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         u = conn_params['user'] if conn_params['user'] is not None else 'elastic'
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
+        self.shards = conn_params['shards']
         try:
             self.es = Elasticsearch(f"http://{h}:{p}",  request_timeout=self.timeout, basic_auth=(u, a), refresh_interval=-1)
             self.es.info()
@@ -75,7 +76,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         try:
-            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=0))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
 
