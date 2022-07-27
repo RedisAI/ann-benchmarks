@@ -25,7 +25,7 @@ def es_wait(es):
     print("Waiting for elasticsearch health endpoint...")
     for i in range(30):
         try:
-            res = es.cluster.health(wait_for_status='yellow', timeout='1s')
+            res = es.cluster.health(wait_for_status='green', timeout='1s')
             if not res['timed_out']: # then status is OK
                 print("Elasticsearch is ready")
                 return
@@ -84,7 +84,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             def gen():
                 for i, vec in enumerate(bulk_array):
                     yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
-            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9)
+            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9, refresh="wait_for")
             assert len(errors) == 0, errors
 
         print('refreshing elastic index...')
