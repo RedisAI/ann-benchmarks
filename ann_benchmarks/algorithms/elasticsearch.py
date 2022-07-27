@@ -55,6 +55,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         self.index = "ann_benchmark"
         self.es = Elasticsearch("{}:{}".format(h,p), request_timeout=self.timeout, basic_auth=(u, a), verify_certs=False)
         self.es.info()
+        self.shards = conn_params['shards']
         self.batch_res = []
         es_wait(self.es)
 
@@ -73,7 +74,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         try:
-            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=1, number_of_replicas=0))
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=0))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
         bulk_size = 500
