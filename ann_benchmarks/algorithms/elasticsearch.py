@@ -5,18 +5,19 @@ Note that this requires X-Pack, which is not included in the OSS version of Elas
 import logging
 import os
 from time import sleep
-from os import environ
 from urllib.error import URLError
 
 from elasticsearch import Elasticsearch, BadRequestError
 from elasticsearch.helpers import bulk
-from elastic_transport.client_utils import DEFAULT
-
+import urllib3
 from ann_benchmarks.algorithms.base import BaseANN
 
 # Configure the elasticsearch logger.
 # By default, it writes an INFO statement for every request.
 logging.getLogger("elasticsearch").setLevel(logging.WARN)
+
+# Disable InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Uncomment these lines if you want to see timing for every HTTP request and its duration.
 # logging.basicConfig(level=logging.INFO)
