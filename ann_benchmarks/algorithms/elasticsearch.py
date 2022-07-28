@@ -3,6 +3,7 @@ ann-benchmarks interfaces for Elasticsearch.
 Note that this requires X-Pack, which is not included in the OSS version of Elasticsearch.
 """
 import logging
+import os
 from time import sleep
 from os import environ
 from urllib.error import URLError
@@ -56,6 +57,8 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         self.es = Elasticsearch("{}:{}".format(h,p), request_timeout=self.timeout, basic_auth=(u, a), verify_certs=False)
         self.es.info()
         self.shards = conn_params['shards']
+        self.replicas = int(os.getenv('ES_REPLICA_COUNT', "0"))
+        self.bulk_size = int(os.getenv('ES_BULK_SIZE', "500"))
         self.batch_res = []
         es_wait(self.es)
 
@@ -74,19 +77,20 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         try:
-            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=0))
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=self.replicas))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
-        bulk_size = 500
+        bulk_size = self.bulk_size
+        print(f'Using a bulk size of {bulk_size} vectors')
         for bulk_array in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
-            print(f'inserting vectors {offset} to {offset+len(bulk_array)}')
-            offset += len(bulk_array)
-
+            bulk_array_len = len(bulk_array)
+            print(f'inserting vectors {offset} to {offset+bulk_array_len}')
             def gen():
                 for i, vec in enumerate(bulk_array):
                     yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
             (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9, refresh="wait_for")
             assert len(errors) == 0, errors
+            offset += bulk_array_len
 
         print('refreshing elastic index...')
         self.es.indices.refresh(index=self.index)
