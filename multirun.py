@@ -41,15 +41,10 @@ def aggregate_outputs(files, clients):
         f.attrs["best_search_time"] = average([fi.attrs["best_search_time"] for fi in fs])
         f.attrs["candidates"] = average([fi.attrs["candidates"] for fi in fs])
 
-        times = f.create_dataset('times', fs[0]['times'].shape, 'f')
-        neighbors = f.create_dataset('neighbors', fs[0]['neighbors'].shape, 'i')
-        distances = f.create_dataset('distances', fs[0]['distances'].shape, 'f')
-        num_tests = len(times)
-
-        for i in range(num_tests):
-            neighbors[i] = [n for n in fs[0]['neighbors'][i]]
-            distances[i] = [n for n in fs[0]['distances'][i]]
-            times[i] = average([fi['times'][i] for fi in fs])
+        # As we split the test work between the clients, wee should concatenate their results
+        f['times'] = [t for fi in fs for t in fi['times']]
+        f['neighbors'] = [n for fi in fs for n in fi['neighbors']]
+        f['distances'] = [d for fi in fs for d in fi['distances']]
 
         [fi.close() for fi in fs]
         [os.remove(fi) for fi in group]
@@ -291,6 +286,9 @@ if __name__ == "__main__":
         observer.join()
         print(
             f'summarizing {int(args.test_clients)} clients data ({len(test_stats_files)} files into {len(test_stats_files) // int(args.test_clients)})...')
+        # ls = os.listdir(outputsdir)
+        # ls.remove('build_stats')
+        # aggregate_outputs(ls, int(args.test_clients))
         aggregate_outputs(test_stats_files, int(args.test_clients))
         print('done!')
 
