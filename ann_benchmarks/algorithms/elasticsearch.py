@@ -3,19 +3,21 @@ ann-benchmarks interfaces for Elasticsearch.
 Note that this requires X-Pack, which is not included in the OSS version of Elasticsearch.
 """
 import logging
+import os
 from time import sleep
-from os import environ
 from urllib.error import URLError
 
 from elasticsearch import Elasticsearch, BadRequestError
 from elasticsearch.helpers import bulk
-from elastic_transport.client_utils import DEFAULT
-
+import urllib3
 from ann_benchmarks.algorithms.base import BaseANN
 
 # Configure the elasticsearch logger.
 # By default, it writes an INFO statement for every request.
 logging.getLogger("elasticsearch").setLevel(logging.WARN)
+
+# Disable InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Uncomment these lines if you want to see timing for every HTTP request and its duration.
 # logging.basicConfig(level=logging.INFO)
@@ -25,7 +27,7 @@ def es_wait(es):
     print("Waiting for elasticsearch health endpoint...")
     for i in range(30):
         try:
-            res = es.cluster.health(wait_for_status='yellow', timeout='1s')
+            res = es.cluster.health(wait_for_status='green', timeout='1s')
             if not res['timed_out']: # then status is OK
                 print("Elasticsearch is ready")
                 return
@@ -53,16 +55,16 @@ class ElasticsearchScriptScoreQuery(BaseANN):
         u = conn_params['user'] if conn_params['user'] is not None else 'elastic'
         a = conn_params['auth'] if conn_params['auth'] is not None else ''
         self.index = "ann_benchmark"
+        self.es = Elasticsearch("{}:{}".format(h,p), request_timeout=self.timeout, basic_auth=(u, a), verify_certs=False)
+        self.es.info()
         self.shards = conn_params['shards']
-        try:
-            self.es = Elasticsearch(f"http://{h}:{p}",  request_timeout=self.timeout, basic_auth=(u, a), refresh_interval=-1)
-            self.es.info()
-        except Exception:
-            self.es = Elasticsearch(f"https://{h}:{p}", request_timeout=self.timeout, basic_auth=(u, a), ca_certs=environ.get('ELASTIC_CA', DEFAULT))
+        self.replicas = int(os.getenv('ES_REPLICA_COUNT', "0"))
+        self.bulk_size = int(os.getenv('ES_BULK_SIZE', "500"))
         self.batch_res = []
         es_wait(self.es)
 
-    def fit(self, X):
+    def fit(self, X, offset=0, limit=None):
+        limit = limit if limit else len(X)
         mappings = dict(
             properties=dict(
                 id=dict(type="keyword", store=True),
@@ -76,19 +78,24 @@ class ElasticsearchScriptScoreQuery(BaseANN):
             )
         )
         try:
-            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=0))
+            self.es.indices.create(index=self.index, mappings=mappings, settings=dict(number_of_shards=self.shards, number_of_replicas=self.replicas))
         except BadRequestError as e:
             if 'resource_already_exists_exception' not in e.message: raise e
+        bulk_size = self.bulk_size
+        print(f'Using a bulk size of {bulk_size} vectors')
+        for bulk_array in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
+            bulk_array_len = len(bulk_array)
+            print(f'inserting vectors {offset} to {offset+bulk_array_len}')
+            def gen():
+                for i, vec in enumerate(bulk_array):
+                    yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(offset+i) }
+            (_, errors) = bulk(self.es, gen(), chunk_size=bulk_size, max_retries=9, refresh="wait_for")
+            assert len(errors) == 0, errors
+            offset += bulk_array_len
 
-        def gen():
-            for i, vec in enumerate(X):
-                yield { "_op_type": "index", "_index": self.index, "vec": vec.tolist(), 'id': str(i) }
-
-        (_, errors) = bulk(self.es, gen(), chunk_size=500, max_retries=9)
-        assert len(errors) == 0, errors
-
+        print('refreshing elastic index...')
         self.es.indices.refresh(index=self.index)
-        self.es.indices.forcemerge(index=self.index, max_num_segments=1)
+        print('finished refreshing elastic index...')
 
     def set_query_arguments(self, ef):
         self.ef = ef
@@ -105,3 +112,7 @@ class ElasticsearchScriptScoreQuery(BaseANN):
     def get_batch_results(self):
         return self.batch_res
 
+    def freeIndex(self):
+        print("Deleting elastic index named {}".format(self.index))
+        self.es.indices.delete(index=self.index)
+        print("Finished deleting elastic index named {}".format(self.index))

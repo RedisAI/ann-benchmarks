@@ -47,8 +47,8 @@ class Milvus(BaseANN):
         X = X.tolist()
         bulk_size = 1000 * 1024 * 1024 // (sys.getsizeof(X[0])) # approximation for milvus insert limit (1024MB)
         for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
-            print(f'inserting vectors {offset} to {len(bulk)}')
-            self._milvus.insert([list(range(offset, len(bulk))), bulk])
+            print(f'inserting vectors {offset} to {offset + len(bulk) - 1}')
+            self._milvus.insert([list(range(offset, offset + len(bulk))), bulk])
             offset += len(bulk)
 
         if not self._milvus.has_index():
