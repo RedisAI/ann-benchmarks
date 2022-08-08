@@ -1,12 +1,11 @@
 from __future__ import absolute_import
-from sqlite3 import paramstyle
+import os
 from pymilvus import (
     connections,
     utility,
     FieldSchema,
     CollectionSchema,
     DataType,
-    IndexType,
     Collection,
 )
 import numpy
@@ -14,6 +13,9 @@ import sklearn.preprocessing
 from ann_benchmarks.algorithms.base import BaseANN
 import sys
 
+# approximation for milvus insert limit by default (1024MB)
+MILVUS_BULK_SIZE_MB_DEFAULT = 1000
+MILVUS_BULK_SIZE_MB = os.getenv("MILVUS_BULK_SIZE_MB",MILVUS_BULK_SIZE_MB_DEFAULT)
 
 class Milvus(BaseANN):
     def __init__(self, metric, dim, conn_params, index_type, method_params):
@@ -45,7 +47,7 @@ class Milvus(BaseANN):
             X = sklearn.preprocessing.normalize(X)
 
         X = X.tolist()
-        bulk_size = 1000 * 1024 * 1024 // (sys.getsizeof(X[0])) # approximation for milvus insert limit (1024MB)
+        bulk_size = MILVUS_BULK_SIZE_MB * 1024 * 1024 // (sys.getsizeof(X[0]))
         for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
             print(f'inserting vectors {offset} to {offset + len(bulk) - 1}')
             self._milvus.insert([list(range(offset, offset + len(bulk))), bulk])
@@ -57,6 +59,7 @@ class Milvus(BaseANN):
                 self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':self._metric, 'params':self._method_params})
                 print('done!')
             except:
+                exit(1)
                 print('failed!')
         
 
