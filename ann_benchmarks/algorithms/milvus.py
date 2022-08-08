@@ -23,6 +23,7 @@ class Milvus(BaseANN):
         self._port = conn_params['port'] # 19530
         self._index_type = index_type
         self._method_params = method_params
+        self._collection_name = 'milvus'
         self._metric = {'angular': 'IP', 'euclidean': 'L2'}[metric]
         self._query_params = dict()
         connections.connect(host=conn_params['host'], port=conn_params['port'])
@@ -32,12 +33,12 @@ class Milvus(BaseANN):
                 FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
             ]
             schema = CollectionSchema(fields)
-            if utility.has_collection('milvus'):
-                self._milvus = Collection('milvus')
+            if utility.has_collection(self._collection_name):
+                self._milvus = Collection(self._collection_name)
             else:
-                self._milvus = Collection('milvus', schema)
+                self._milvus = Collection(self._collection_name, schema)
         except:
-            self._milvus = Collection('milvus')
+            self._milvus = Collection(self._collection_name)
         print('initialization completed!')
     
     def fit(self, X, offset=0, limit=None):
@@ -66,7 +67,7 @@ class Milvus(BaseANN):
     def set_query_arguments(self, param):
         if self._milvus.has_index():
             print('waiting for index... ', end='')
-            if utility.wait_for_index_building_complete('milvus', 'vector'):
+            if utility.wait_for_index_building_complete(self._collection_name, 'vector'):
                 print('done!')
                 self._milvus.load()
                 print('waiting for data to be loaded... ', end='')
@@ -96,7 +97,7 @@ class Milvus(BaseANN):
         return 'Milvus(index_type=%s, method_params=%s, query_params=%s)' % (self._index_type, str(self._method_params), str(self._query_params))
 
     def freeIndex(self):
-        utility.drop_collection("mlivus")
+        utility.drop_collection(self._collection_name)
 
     def done(self):
         connections.disconnect('default')
