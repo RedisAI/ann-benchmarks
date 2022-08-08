@@ -15,7 +15,7 @@ import sys
 
 # approximation for milvus insert limit by default (1024MB)
 MILVUS_BULK_SIZE_MB_DEFAULT = 1000
-MILVUS_BULK_SIZE_MB = os.getenv("MILVUS_BULK_SIZE_MB",MILVUS_BULK_SIZE_MB_DEFAULT)
+MILVUS_BULK_SIZE_MB = int(os.getenv("MILVUS_BULK_SIZE_MB",MILVUS_BULK_SIZE_MB_DEFAULT))
 
 class Milvus(BaseANN):
     def __init__(self, metric, dim, conn_params, index_type, method_params):
