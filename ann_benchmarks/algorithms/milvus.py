@@ -54,6 +54,9 @@ class Milvus(BaseANN):
             self._milvus.insert([list(range(offset, offset + len(bulk))), bulk])
             offset += len(bulk)
 
+        # As stated on Milvus documentation:
+        # For static data, it is recommended to import all the data at first and then create indexes.
+        # https://milvus.io/docs/v1.0.0/create_drop_index_python.md
         if not self._milvus.has_index():
             print('indexing...', end=' ')
             try:
