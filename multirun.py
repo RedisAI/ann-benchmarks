@@ -11,13 +11,6 @@ import pathlib
 from ann_benchmarks.results import get_result_filename
 from ann_benchmarks.algorithms.definitions import get_run_groups
 
-from redis import Redis
-from redis.cluster import RedisCluster
-
-from pymilvus import utility, connections
-
-import pinecone
-
 
 def aggregate_outputs(files, clients):
     different_attrs = set([f.split('client')[0] for f in files])
@@ -48,15 +41,10 @@ def aggregate_outputs(files, clients):
         f.attrs["best_search_time"] = average([fi.attrs["best_search_time"] for fi in fs])
         f.attrs["candidates"] = average([fi.attrs["candidates"] for fi in fs])
 
-        times = f.create_dataset('times', fs[0]['times'].shape, 'f')
-        neighbors = f.create_dataset('neighbors', fs[0]['neighbors'].shape, 'i')
-        distances = f.create_dataset('distances', fs[0]['distances'].shape, 'f')
-        num_tests = len(times)
-
-        for i in range(num_tests):
-            neighbors[i] = [n for n in fs[0]['neighbors'][i]]
-            distances[i] = [n for n in fs[0]['distances'][i]]
-            times[i] = average([fi['times'][i] for fi in fs])
+        # As we split the test work between the clients, wee should concatenate their results
+        f['times'] = [t for fi in fs for t in fi['times']]
+        f['neighbors'] = [n for fi in fs for n in fi['neighbors']]
+        f['distances'] = [d for fi in fs for d in fi['distances']]
 
         [fi.close() for fi in fs]
         [os.remove(fi) for fi in group]
@@ -155,15 +143,33 @@ if __name__ == "__main__":
     print("Changing the workdir to {}".format(workdir))
     os.chdir(workdir)
 
-    isredis = True if 'redisearch' in args.algorithm else False
-    ismilvus = True if 'milvus' in args.algorithm else False
-    ispinecone = True if 'pinecone' in args.algorithm else False
+    # All supported algorithms that need spacial stuff
+    isredis = ismilvus = ispinecone = iselastic = False
+
+    if 'redisearch' in args.algorithm:
+        from redis import Redis
+        from redis.cluster import RedisCluster
+        isredis = True
+
+    elif 'milvus' in args.algorithm:
+        from pymilvus import utility, connections
+        ismilvus = True
+
+    elif 'pinecone' in args.algorithm:
+        import pinecone
+        ispinecone = True
+
+    elif 'elasticsearch' in args.algorithm:
+        from elasticsearch import Elasticsearch
+        from elastic_transport.client_utils import DEFAULT
+        iselastic = True
 
     if args.host is None:
         args.host = 'localhost'
     if args.port is None:
         if isredis: args.port = '6379'
         elif ismilvus: args.port = '19530'
+        elif iselastic: args.port = '9200'
 
     if isredis:
         redis = RedisCluster if args.cluster else Redis
@@ -172,6 +178,14 @@ if __name__ == "__main__":
         connections.connect(host=args.host, port=args.port)
     elif ispinecone:
         pinecone.init(api_key=args.auth)
+    elif iselastic:
+        args.user = args.user if args.user is not None else 'elastic'
+        args.auth = args.auth if args.auth is not None else os.environ.get('ELASTIC_PASSWORD', '')
+        try:
+            es = Elasticsearch([f'http://{args.host}:{args.port}'],  request_timeout=3600, basic_auth=(args.user, args.auth))
+            es.info()
+        except Exception:
+            es = Elasticsearch([f'https://{args.host}:{args.port}'], request_timeout=3600, basic_auth=(args.user, args.auth), ca_certs=os.environ.get('ELASTIC_CA', DEFAULT))
 
     if args.run_group is not None:
         run_groups = [args.run_group]
@@ -213,20 +227,23 @@ if __name__ == "__main__":
         observer.start()
 
     for run_group in run_groups:
-        if isredis:
-            redis.flushall()
-        elif ismilvus:
-            if utility.has_collection('milvus'):
-                utility.drop_collection('milvus')
-        elif ispinecone:
-            for idx in pinecone.list_indexes():
-                pinecone.delete_index(idx)
-
         results_dict = {}
         curr_base_build = base_build + ' --run-group ' + run_group
         curr_base_test = base_test + ' --run-group ' + run_group
 
         if int(args.build_clients) > 0:
+            if isredis:
+                redis.flushall()
+            elif ismilvus:
+                if utility.has_collection('milvus'):
+                    utility.drop_collection('milvus')
+            elif ispinecone:
+                for idx in pinecone.list_indexes():
+                    pinecone.delete_index(idx)
+            elif iselastic:
+                for idx in es.indices.stats()['indices']:
+                    es.indices.delete(index=idx)
+
             clients = [Process(target=os.system, args=(curr_base_build + ' --client-id ' + str(i),)) for i in
                        range(1, int(args.build_clients) + 1)]
 
@@ -245,6 +262,8 @@ if __name__ == "__main__":
                 if not args.cluster:  # TODO: get total size from all the shards
                     index_size = float(redis.ft('ann_benchmark').info()['vector_index_sz_mb']) * 1024
                 f.attrs["index_size"] = index_size
+            elif iselastic:
+                f.attrs["index_size"] = es.indices.stats(index='ann_benchmark')['indices']['ann_benchmark']['total']['store']['size_in_bytes']
             f.close()
             results_dict["build"] = {"total_clients": args.build_clients, "build_time": total_time,
                                      "vector_index_sz_mb": index_size}
@@ -267,6 +286,9 @@ if __name__ == "__main__":
         observer.join()
         print(
             f'summarizing {int(args.test_clients)} clients data ({len(test_stats_files)} files into {len(test_stats_files) // int(args.test_clients)})...')
+        # ls = os.listdir(outputsdir)
+        # ls.remove('build_stats')
+        # aggregate_outputs(ls, int(args.test_clients))
         aggregate_outputs(test_stats_files, int(args.test_clients))
         print('done!')
 
