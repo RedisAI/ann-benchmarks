@@ -161,7 +161,7 @@ function""" % (definition.module, definition.constructor, definition.arguments)
             else:
                 X_test = X_test[offset:]
             print('running %d out of them' % len(X_test))
-            
+
             for pos, query_arguments in enumerate(query_argument_groups, 1):
                 print("Running query argument group %d of %d..." %
                       (pos, len(query_argument_groups)))
@@ -324,7 +324,7 @@ def _handle_container_return_value(return_value, container, logger):
         error_msg = return_value['Error']
         exit_code = return_value['StatusCode']
         msg = base_msg + 'returned exit code %d with message %s' %(exit_code, error_msg)
-    else: 
+    else:
         exit_code = return_value
         msg = base_msg + 'returned exit code %d' % (exit_code)
 

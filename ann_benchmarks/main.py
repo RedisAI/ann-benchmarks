@@ -186,7 +186,7 @@ def main():
     if args.list_algorithms:
         list_algorithms(args.definitions)
         sys.exit(0)
-    
+
     if args.build_only and args.test_only:
         raise Exception('Nothing to run (build only and test only was specified)')
     if (args.build_only or args.test_only) and not args.local:
