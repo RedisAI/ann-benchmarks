@@ -53,6 +53,7 @@ float:
             - {"BLOCK_SIZE": 1024}
 
     vecsim-hnsw:
+      docker-tag: ann-benchmarks-vecsim
       module: ann_benchmarks.algorithms.vecsim-hnsw
       constructor: VecSimHnsw
       base-args: ["@metric"]
