@@ -11,6 +11,7 @@ import random
 import shutil
 import sys
 import traceback
+import time
 
 from ann_benchmarks.datasets import get_dataset, DATASETS
 from ann_benchmarks.constants import INDEX_DIR
@@ -307,11 +308,18 @@ def main():
     queue = multiprocessing.Queue()
     for definition in definitions:
         queue.put(definition)
-    if args.batch and args.parallelism > 1:
-        raise Exception(f"Batch mode uses all available CPU resources, --parallelism should be set to 1. (Was: {args.parallelism})")
-    workers = [multiprocessing.Process(target=run_worker, args=(i+1, args, queue))
-               for i in range(args.parallelism)]
-    [worker.start() for worker in workers]
-    [worker.join() for worker in workers]
+
+    if args.parallelism == 1:
+        # Wait for some jobs to be inserted into the queue
+        while queue.empty(): time.sleep(0.01)
+        # If we're only running one worker, then we can just run it in the same process
+        run_worker(1, args, queue)
+    else:
+        if args.batch:
+            raise Exception(f"Batch mode uses all available CPU resources, --parallelism should be set to 1. (Was: {args.parallelism})")
+        workers = [multiprocessing.Process(target=run_worker, args=(i+1, args, queue))
+                   for i in range(args.parallelism)]
+        [worker.start() for worker in workers]
+        [worker.join() for worker in workers]
 
     # TODO: need to figure out cleanup handling here
