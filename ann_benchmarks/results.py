@@ -19,7 +19,7 @@ def get_result_filename(dataset=None, count=None, definition=None,
         data = definition.arguments + query_arguments
         for i in range(len(data)):
             if isinstance(data[i], dict):
-                data[i] = {k:data[i][k] for k in data[i] if data[i][k] is not None}
+                data[i] = {k:data[i][k] for k in data[i] if data[i][k] is not None and k != 'auth'}
         data.append('client')
         data.append(id)
         d.append(re.sub(r'\W+', '_', json.dumps(data, sort_keys=True)).strip('_') + ".hdf5")
