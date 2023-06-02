@@ -75,9 +75,8 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
             results = batch_query(X_test)
         else:
             results = [single_query(x) for x in X_test]
-
+        end_time = time.time()
         total_time = sum(time for time, _ in results)
-        end_time += total_time
         total_candidates = sum(len(candidates) for _, candidates in results)
         search_time = total_time / len(X_test)
         avg_candidates = total_candidates / len(X_test)

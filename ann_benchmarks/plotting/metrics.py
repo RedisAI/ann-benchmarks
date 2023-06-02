@@ -76,15 +76,11 @@ def rel(dataset_distances, run_distances, metrics):
     return metrics.attrs['rel']
 
 
-def throughput(queries, attrs):
+def queries_per_second(queries, attrs):
     try:
         return (attrs['run_count'] * len(queries)) / (attrs["end_querying_time"] - attrs["start_querying_time"])
     except KeyError:
-        return 0
-
- # actually qps per thread/connection
-def queries_per_second(queries, attrs):
-    return 1.0 / attrs["best_search_time"]
+        return 1.0 / attrs["best_search_time"]
 
 def percentile_50(times):
     return np.percentile(times, 50.0) * 1000.0
@@ -136,11 +132,6 @@ all_metrics = {
         "description": "Relative Error",
         "function": lambda true_distances, run_distances, metrics, times, run_attrs: rel(true_distances, run_distances, metrics),  # noqa
         "worst": float("inf")
-    },
-    "throughput": {
-        "description": "Index (Server) Throughput (qps over all threads/connections)",
-        "function": lambda true_distances, run_distances, metrics, times, run_attrs: throughput(true_distances, run_attrs),  # noqa
-        "worst": float("-inf")
     },
     "qps": {
         "description": "Queries per second (1/s)",

@@ -2,7 +2,6 @@ from ann_benchmarks.plotting.metrics import all_metrics as metrics
 
 all_plot_variants = {
     "recall/time": ("k-nn", "qps"),
-    "recall/absolute_time": ("k-nn", "throughput"),
     "recall/buildtime": ("k-nn", "build"),
     "recall/indexsize": ("k-nn", "indexsize"),
     "recall/distcomps": ("k-nn", "distcomps"),
