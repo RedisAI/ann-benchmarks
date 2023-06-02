@@ -40,6 +40,8 @@ def aggregate_outputs(files, clients):
             f.attrs[k] = v
         f.attrs["best_search_time"] = average([fi.attrs["best_search_time"] for fi in fs])
         f.attrs["candidates"] = average([fi.attrs["candidates"] for fi in fs])
+        f.attrs["start_querying_time"] = min([fi.attrs["start_querying_time"] for fi in fs])
+        f.attrs["end_querying_time"] = max([fi.attrs["end_querying_time"] for fi in fs])
 
         # As we split the test work between the clients, wee should concatenate their results
         f['times'] = [t for fi in fs for t in fi['times']]

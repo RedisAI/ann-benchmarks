@@ -27,6 +27,8 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         ((not batch) and hasattr(algo, "prepare_query"))
 
     best_search_time = float('inf')
+    start_time = time.time() # actual start time
+    end_time = start_time # "virtual" end time. actual end time is start_time + sum of query times
     for i in range(run_count):
         print('Run %d/%d...' % (i + 1, run_count))
         # a bit dumb but can't be a scalar since of Python's scoping rules
@@ -73,7 +75,7 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
             results = batch_query(X_test)
         else:
             results = [single_query(x) for x in X_test]
-
+        end_time = time.time()
         total_time = sum(time for time, _ in results)
         total_candidates = sum(len(candidates) for _, candidates in results)
         search_time = total_time / len(X_test)
@@ -85,6 +87,8 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
     attrs = {
         "batch_mode": batch,
         "best_search_time": best_search_time,
+        "start_querying_time": start_time,
+        "end_querying_time": end_time,
         "candidates": avg_candidates,
         "expect_extra": verbose,
         "name": str(algo),

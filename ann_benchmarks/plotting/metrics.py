@@ -77,7 +77,10 @@ def rel(dataset_distances, run_distances, metrics):
 
 
 def queries_per_second(queries, attrs):
-    return 1.0 / attrs["best_search_time"]
+    try:
+        return (attrs['run_count'] * len(queries)) / (attrs["end_querying_time"] - attrs["start_querying_time"])
+    except KeyError:
+        return 1.0 / attrs["best_search_time"]
 
 def percentile_50(times):
     return np.percentile(times, 50.0) * 1000.0
