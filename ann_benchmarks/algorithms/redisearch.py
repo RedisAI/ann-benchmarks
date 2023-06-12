@@ -15,6 +15,7 @@ class RediSearch(BaseANN):
         self.name = 'redisearch-%s (%s)' % (self.algo, self.method_param)
         self.index_name = "ann_benchmark"
         self.text = None
+        self.ef = None
         
         redis = RedisCluster if conn_params['cluster'] else Redis
         host = conn_params["host"] if conn_params["host"] else 'localhost'
@@ -87,4 +88,7 @@ class RediSearch(BaseANN):
         self.redis.execute_command("FLUSHALL")
 
     def __str__(self):
-        return self.name + f", efRuntime: {self.ef}"
+        res = self.name
+        if self.ef is not None:
+            res += + f", efRuntime: {self.ef}"
+        return res
