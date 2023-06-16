@@ -37,7 +37,7 @@ class RediSearch(BaseANN):
             elif self.algo == "FLAT":
                 args.extend(['vector', 'VECTOR', self.algo, '6', 'TYPE', 'FLOAT32', 'DIM', len(X[0]), 'DISTANCE_METRIC', self.metric])
             print("Calling FT.CREATE", *args)
-            self.redis.execute_command('FT.CREATE', *args,  target_nodes='random')
+            self.redis.execute_command('FT.CREATE', *args,  target_nodes='primaries')
         except Exception as e:
             if 'Index already exists' not in str(e):
                 raise
