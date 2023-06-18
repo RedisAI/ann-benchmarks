@@ -1,45 +1,99 @@
 from __future__ import absolute_import
-import milvus
+from sqlite3 import paramstyle
+from pymilvus import (
+    connections,
+    utility,
+    FieldSchema,
+    CollectionSchema,
+    DataType,
+    IndexType,
+    Collection,
+)
 import numpy
 import sklearn.preprocessing
 from ann_benchmarks.algorithms.base import BaseANN
+import sys
 
 
 class Milvus(BaseANN):
-    def __init__(self, metric, index_type, nlist):
-        self._nlist = nlist
-        self._nprobe = None
-        self._metric = metric
-        self._milvus = milvus.Milvus()
-        self._milvus.connect(host='localhost', port='19530')
-        self._table_name = 'test01'
+    def __init__(self, metric, dim, conn_params, index_type, method_params):
+        self._host = conn_params['host']
+        self._port = conn_params['port'] # 19530
         self._index_type = index_type
+        self._method_params = method_params
+        self._metric = {'angular': 'IP', 'euclidean': 'L2'}[metric]
+        self._query_params = dict()
+        connections.connect(host=conn_params['host'], port=conn_params['port'])
+        try:
+            fields = [
+                FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
+                FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim)
+            ]
+            schema = CollectionSchema(fields)
+            if utility.has_collection('milvus'):
+                self._milvus = Collection('milvus')
+            else:
+                self._milvus = Collection('milvus', schema)
+        except:
+            self._milvus = Collection('milvus')
+        print('initialization completed!')
+    
+    def fit(self, X, offset=0, limit=None):
+        limit = limit if limit else len(X)
+        X = X[offset:limit]
+        if self._metric == 'IP':
+            X = sklearn.preprocessing.normalize(X)
 
-    def fit(self, X):
-        if self._metric == 'angular':
-            X = sklearn.preprocessing.normalize(X, axis=1, norm='l2')
+        X = X.tolist()
+        bulk_size = 1000 * 1024 * 1024 // (sys.getsizeof(X[0])) # approximation for milvus insert limit (1024MB)
+        for bulk in [X[i: i+bulk_size] for i in range(0, len(X), bulk_size)]:
+            print(f'inserting vectors {offset} to {offset + len(bulk) - 1}')
+            self._milvus.insert([list(range(offset, offset + len(bulk))), bulk])
+            offset += len(bulk)
 
-        self._milvus.create_table({'table_name': self._table_name, 'dimension': X.shape[1]})
-        vector_ids = [id for id in range(len(X))]
-        self._milvus.insert(table_name=self._table_name, records=X.tolist(), ids=vector_ids)
-        index_type = getattr(milvus.IndexType, self._index_type)  # a bit hacky but works
-        self._milvus.create_index(self._table_name, {'index_type': index_type, 'nlist': self._nlist})
+        if not self._milvus.has_index():
+            print('indexing...', end=' ')
+            try:
+                self._milvus.create_index('vector', {'index_type': self._index_type, 'metric_type':self._metric, 'params':self._method_params})
+                print('done!')
+            except:
+                print('failed!')
+        
 
-    def set_query_arguments(self, nprobe):
-        if nprobe > self._nlist:
-            print('warning! nprobe > nlist')
-            nprobe = self._nlist
-        self._nprobe = nprobe
+    def set_query_arguments(self, param):
+        if self._milvus.has_index():
+            print('waiting for index... ', end='')
+            if utility.wait_for_index_building_complete('milvus', 'vector'):
+                print('done!')
+                self._milvus.load()
+                print('waiting for data to be loaded... ', end='')
+                utility.wait_for_loading_complete('milvus')
+                print('done!')
+            else: raise Exception('index has error')
+        else: raise Exception('index is missing')
+        if 'IVF_' in self._index_type:
+            if param > self._method_params['nlist']:
+                print('warning! nprobe > nlist')
+                param = self._method_params['nlist']
+            self._query_params['nprobe'] = param
+        if 'HNSW' in self._index_type:
+            self._query_params['ef'] = param
 
     def query(self, v, n):
-        if self._metric == 'angular':
+        if self._metric == 'IP':
             v /= numpy.linalg.norm(v)
         v = v.tolist()
-        status, results = self._milvus.search(table_name=self._table_name, query_records=[v], top_k=n, nprobe=self._nprobe)
+        results = self._milvus.search([v], 'vector', {'metric_type':self._metric, 'params':self._query_params}, limit=n)
         if not results:
             return []  # Seems to happen occasionally, not sure why
         result_ids = [result.id for result in results[0]]
         return result_ids
 
     def __str__(self):
-        return 'Milvus(index_type=%s, nlist=%d, nprobe=%d)' % (self._index_type, self._nlist, self._nprobe)
+        return 'Milvus(index_type=%s, method_params=%s, query_params=%s)' % (self._index_type, str(self._method_params), str(self._query_params))
+
+    def freeIndex(self):
+        utility.drop_collection("mlivus")
+
+    def done(self):
+        connections.disconnect('default')

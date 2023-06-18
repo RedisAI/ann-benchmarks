@@ -1,3 +1,4 @@
+from copyreg import pickle
 import h5py
 import numpy
 import os
@@ -7,6 +8,7 @@ from urllib.request import urlopen
 from urllib.request import urlretrieve
 
 from ann_benchmarks.distance import dataset_transform
+import urllib.parse
 
 
 def download(src, dst):
@@ -18,14 +20,26 @@ def download(src, dst):
 
 def get_dataset_fn(dataset):
     if not os.path.exists('data'):
-        os.mkdir('data')
+        try:
+            os.mkdir('data')
+        except FileExistsError:
+            pass # fixes race condition
     return os.path.join('data', '%s.hdf5' % dataset)
 
 
 def get_dataset(which):
     hdf5_fn = get_dataset_fn(which)
     try:
-        url = 'http://ann-benchmarks.com/%s.hdf5' % which
+        if 'dbpedia' in which:
+             url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/dbpedia/dbpedia-768.hdf5'
+        elif 'amazon-reviews' in which:
+             url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/amazon_reviews/amazon-reviews-384.hdf5'
+        elif 'hybrid' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/hybrid_datasets/%s.hdf5' % urllib.parse.quote(which)
+        elif 'Text-to-Image' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/big_ann/%s.hdf5' % urllib.parse.quote(which)
+        else:    
+            url = 'http://ann-benchmarks.com/%s.hdf5' % which
         download(url, hdf5_fn)
     except:
         print("Cannot download %s" % url)
@@ -39,7 +53,6 @@ def get_dataset(which):
     dimension = int(hdf5_f.attrs['dimension']) if 'dimension' in hdf5_f.attrs else len(hdf5_f['train'][0])
 
     return hdf5_f, dimension
-
 
 # Everything below this line is related to creating datasets
 # You probably never need to do this at home,
@@ -425,6 +438,129 @@ def lastfm(out_fn, n_dimensions, test_size=50000):
     # as the inner product on the untransformed data
     write_output(item_factors, user_factors, out_fn, 'angular')
 
+def parse_dbpedia_data(source_file, max_docs: int):
+    import re
+    """
+    Parses the input file of abstracts and returns an iterable
+    :param max_docs: maximum number of input documents to process; -1 for no limit
+    :param source_file: input file
+    :return: yields document by document to the consumer
+    """
+    global VERBOSE
+    count = 0
+    max_tokens = 0
+
+    if -1 < max_docs < 50:
+        VERBOSE = True
+
+    percent = 0.1
+    bulk_size = (percent / 100) * max_docs
+
+    print(f"bulk_size={bulk_size}")
+
+    if bulk_size <= 0:
+        bulk_size = 1000
+
+    for line in source_file:
+        line = line.decode("utf-8")
+
+        # skip commented out lines
+        comment_regex = '^#'
+        if re.search(comment_regex, line):
+            continue
+
+        token_size = len(line.split())
+        if token_size > max_tokens:
+            max_tokens = token_size
+
+        # skip lines with 20 tokens or less, because they tend to contain noise
+        # (this may vary in your dataset)
+        if token_size <= 20:
+            continue
+
+        first_url_regex = '^<([^\>]+)>\s*'
+
+        x = re.search(first_url_regex, line)
+        if x:
+            url = x.group(1)
+            # also remove the url from the string
+            line = re.sub(first_url_regex, '', line)
+        else:
+            url = ''
+
+        # remove the second url from the string: we don't need to capture it, because it is repetitive across
+        # all abstracts
+        second_url_regex = '^<[^\>]+>\s*'
+        line = re.sub(second_url_regex, '', line)
+
+        # remove some strange line ending, that occurs in many abstracts
+        language_at_ending_regex = '@en \.\n$'
+        line = re.sub(language_at_ending_regex, '', line)
+
+        # form the input object for this abstract
+        doc = {
+            "_text_": line,
+            "url": url,
+            "id": count+1
+        }
+
+        yield doc
+        count += 1
+
+        if count % bulk_size == 0:
+            print(f"Processed {count} documents", end="\r")
+
+        if count == max_docs:
+            break
+
+    source_file.close()
+    print("Maximum tokens observed per abstract: {}".format(max_tokens))
+
+def dbpedia(out_fn):
+    import bz2
+    from sentence_transformers import SentenceTransformer
+    import torch
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
+    local_fn = "long_abstracts_en.ttl.bz2"
+    url = "http://downloads.dbpedia.org/2016-10/core-i18n/en/long_abstracts_en.ttl.bz2"
+    download(url, local_fn)
+    source_file = bz2.BZ2File(local_fn, "r")
+    docs_iter = parse_dbpedia_data(source_file=source_file, max_docs=1000000)
+    text = []
+    for doc in docs_iter:
+        text.append(doc['_text_'])
+    model = SentenceTransformer('bert-base-nli-mean-tokens')
+    model.to(device)
+    sentence_embeddings = model.encode(text, show_progress_bar=True)
+    write_output(sentence_embeddings, sentence_embeddings[:10000], out_fn, 'angular')
+
+
+def amazon_reviews(out_fn):
+    import os
+    import math
+    import pickle
+    import numpy as np
+    subsets = ['Wireless_v1_00', 'Watches_v1_00', 'Video_Games_v1_00', 'Video_DVD_v1_00', 'Video_v1_00', 'Toys_v1_00', 'Tools_v1_00', 'Sports_v1_00', 'Software_v1_00', 'Shoes_v1_00', 'Pet_Products_v1_00', 'Personal_Care_Appliances_v1_00', 'PC_v1_00', 'Outdoors_v1_00', 'Office_Products_v1_00', 'Musical_Instruments_v1_00', 'Music_v1_00', 'Mobile_Electronics_v1_00', 'Mobile_Apps_v1_00', 'Major_Appliances_v1_00', 'Luggage_v1_00', 'Lawn_and_Garden_v1_00', 'Kitchen_v1_00', 'Jewelry_v1_00', 'Home_Improvement_v1_00', 'Home_Entertainment_v1_00', 'Home_v1_00', 'Health_Personal_Care_v1_00', 'Grocery_v1_00', 'Gift_Card_v1_00', 'Furniture_v1_00', 'Electronics_v1_00', 'Digital_Video_Games_v1_00', 'Digital_Video_Download_v1_00', 'Digital_Software_v1_00', 'Digital_Music_Purchase_v1_00', 'Digital_Ebook_Purchase_v1_00', 'Camera_v1_00', 'Books_v1_00', 'Beauty_v1_00', 'Baby_v1_00', 'Automotive_v1_00', 'Apparel_v1_00', 'Digital_Ebook_Purchase_v1_01', 'Books_v1_01', 'Books_v1_02']
+    train_set = None
+    test_set = None
+    for i, subset in enumerate(subsets):
+        url = f'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/amazon_reviews/{subset}_embeddings'
+        local_fn = f'{subset}_embeddings'
+        download(url, local_fn)
+        subset_embeddings = pickle.load(open(local_fn, "rb"))
+        if i==0:
+            train_set = subset_embeddings
+            test_set = subset_embeddings[:math.ceil(10000/len(subsets))]
+        else:
+            train_set = np.append(train_set, subset_embeddings, axis =0)
+            test_set = np.append(test_set, subset_embeddings[:math.ceil(10000/len(subsets))], axis=0)
+        print(subset_embeddings.shape)
+        print(train_set.shape)
+        print(test_set.shape)
+        os.remove(local_fn)
+    write_output(train_set, test_set[:10000], out_fn, 'angular')
+
 
 DATASETS = {
     'deep-image-96-angular': deep_image,
@@ -463,4 +599,22 @@ DATASETS = {
     'sift-256-hamming': lambda out_fn: sift_hamming(
         out_fn, 'sift.hamming.256'),
     'kosarak-jaccard': lambda out_fn: kosarak(out_fn),
+    'dbpedia-768' : lambda out_fn: dbpedia(out_fn),
+    'amazon-reviews-384': lambda out_fn: amazon_reviews(out_fn),
 }
+
+
+
+
+big_ann_datasets = [f'Text-to-Image-{x}' for x in ['10M', '20M', '30M', '40M', '50M', '60M', '70M', '80M', '90M', '100M']]
+for dataset in big_ann_datasets:
+     DATASETS[dataset] = lambda fn: ()
+
+
+hybrid_datasets = ['glove-200-angular', 'gist-960-euclidean', 'deep-image-96-angular', 'fashion-mnist-784-euclidean']
+hybrid_datasets.extend(big_ann_datasets)
+percentiles= ['0.5', '1', '2', '5', '10', '20', '50']
+for dataset in hybrid_datasets:
+    for percentile in percentiles:
+        DATASETS[f'{dataset}-hybrid-{percentile}'] = lambda fn: ()
+

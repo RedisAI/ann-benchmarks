@@ -6,6 +6,7 @@ import threading
 import time
 import traceback
 import inspect
+import h5py
 
 import colors
 import docker
@@ -16,7 +17,7 @@ from ann_benchmarks.algorithms.definitions import (Definition,
                                                    instantiate_algorithm)
 from ann_benchmarks.datasets import get_dataset, DATASETS
 from ann_benchmarks.distance import metrics, dataset_transform
-from ann_benchmarks.results import store_results
+from ann_benchmarks.results import get_result_filename, store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count,
@@ -26,6 +27,8 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
         ((not batch) and hasattr(algo, "prepare_query"))
 
     best_search_time = float('inf')
+    start_time = time.time() # actual start time
+    end_time = start_time # "virtual" end time. actual end time is start_time + sum of query times
     for i in range(run_count):
         print('Run %d/%d...' % (i + 1, run_count))
         # a bit dumb but can't be a scalar since of Python's scoping rules
@@ -72,17 +75,20 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
             results = batch_query(X_test)
         else:
             results = [single_query(x) for x in X_test]
-
+        end_time = time.time()
         total_time = sum(time for time, _ in results)
         total_candidates = sum(len(candidates) for _, candidates in results)
         search_time = total_time / len(X_test)
         avg_candidates = total_candidates / len(X_test)
         best_search_time = min(best_search_time, search_time)
+        print("qps:", len(X_test)/total_time)
 
     verbose = hasattr(algo, "query_verbose")
     attrs = {
         "batch_mode": batch,
         "best_search_time": best_search_time,
+        "start_querying_time": start_time,
+        "end_querying_time": end_time,
         "candidates": avg_candidates,
         "expect_extra": verbose,
         "name": str(algo),
@@ -105,12 +111,20 @@ algorithm instantiated from it does not implement the set_query_arguments \
 function""" % (definition.module, definition.constructor, definition.arguments)
 
     D, dimension = get_dataset(dataset)
-    X_train = numpy.array(D['train'])
-    X_test = numpy.array(D['test'])
+    X_train, X_test = dataset_transform(D)
     distance = D.attrs['distance']
     print('got a train set of size (%d * %d)' % (X_train.shape[0], dimension))
 
-    X_train, X_test = dataset_transform(D)
+    hybrid_buckets = None
+    if 'bucket_names' in D.attrs:
+        hybrid_buckets = {}
+        bucket_names = D.attrs['bucket_names']
+        for bucket_name in bucket_names:
+            bucket_dict = {}
+            bucket_dict['ids'] = numpy.array(D[f'{bucket_name}_ids'])
+            bucket_dict['text'] = D[bucket_name]['text'][()]
+            bucket_dict['number'] = D[bucket_name]['number'][()]
+            hybrid_buckets[bucket_name] = bucket_dict
 
     try:
         prepared_queries = False
@@ -120,15 +134,17 @@ function""" % (definition.module, definition.constructor, definition.arguments)
         if not test_only:
             per_client = len(X_train) // num_clients
             offset = per_client * (id - 1)
-            fit_args = [X_train]
+            fit_kwargs = {}
             if "offset" and "limit" in inspect.getfullargspec(algo.fit)[0]:
-                fit_args.append(offset)
+                fit_kwargs['offset']=offset
                 if num_clients != id:
-                    fit_args.append(offset + per_client)
-            
+                    fit_kwargs['limit']=offset + per_client
+            if hybrid_buckets:
+                fit_kwargs['hybrid_buckets']=hybrid_buckets
+
             t0 = time.time()
             memory_usage_before = algo.get_memory_usage()
-            algo.fit(*fit_args)
+            algo.fit(X_train, **fit_kwargs)
             build_time = time.time() - t0
             index_size = algo.get_memory_usage() - memory_usage_before
             print('Built index in', build_time)
@@ -142,14 +158,37 @@ function""" % (definition.module, definition.constructor, definition.arguments)
 
         if not build_only:
             print('got %d queries' % len(X_test))
+            per_client = len(X_test) // num_clients
+            offset = per_client * (id - 1)
+            if (num_clients != id):
+                X_test = X_test[offset : offset + per_client]
+            else:
+                X_test = X_test[offset:]
+            print('running %d out of them' % len(X_test))
+
             for pos, query_arguments in enumerate(query_argument_groups, 1):
                 print("Running query argument group %d of %d..." %
                       (pos, len(query_argument_groups)))
                 if query_arguments:
                     algo.set_query_arguments(*query_arguments)
+                if hybrid_buckets:
+                    text = hybrid_buckets[D.attrs['selected_bucket']]['text'].decode()
+                    print("setting hybrid text query", text)
+                    algo.set_hybrid_query(text)
                 descriptor, results = run_individual_query(
                     algo, X_train, X_test, distance, count, run_count, batch)
-                if not test_only:
+                if test_only:
+                    try:
+                        fn = get_result_filename(dataset, count)
+                        fn = os.path.join(fn, definition.algorithm, 'build_stats')
+                        f = h5py.File(fn, 'r')
+                        descriptor["build_time"] = f.attrs["build_time"]
+                        descriptor["index_size"] = f.attrs["index_size"]
+                        f.close()
+                    except:
+                        descriptor["build_time"] = 0
+                        descriptor["index_size"] = 0
+                else:
                     descriptor["build_time"] = build_time
                     descriptor["index_size"] = index_size
                 descriptor["algo"] = definition.algorithm
@@ -289,7 +328,7 @@ def _handle_container_return_value(return_value, container, logger):
         error_msg = return_value['Error']
         exit_code = return_value['StatusCode']
         msg = base_msg + 'returned exit code %d with message %s' %(exit_code, error_msg)
-    else: 
+    else:
         exit_code = return_value
         msg = base_msg + 'returned exit code %d' % (exit_code)
 
