@@ -90,5 +90,5 @@ class RediSearch(BaseANN):
     def __str__(self):
         res = self.name
         if self.ef is not None:
-            res += + f", efRuntime: {self.ef}"
+            res += f", efRuntime: {self.ef}"
         return res
