@@ -5,6 +5,7 @@ import h5py
 from joblib import Parallel, delayed
 import multiprocessing
 import tqdm
+from datasets import load_dataset
 
 
 def calc_i(i, x, bf, test, neighbors, distances, count):
@@ -70,8 +71,6 @@ def create_ds(train_size, test_size, distance):
     dim = 768
     total_vecs = train_size + test_size
     X = np.zeros((total_vecs, dim), dtype=np.float32)
-    from datasets import load_dataset
-
     data = load_dataset(
         "Cohere/wikipedia-22-12-simple-embeddings", split="train", streaming=True
     )
