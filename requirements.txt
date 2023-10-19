@@ -12,3 +12,4 @@ pymilvus==2.0.2
 pinecone-client==2.0.11
 redis==4.3.2
 elasticsearch==8.3.1
+datasets==2.14.5

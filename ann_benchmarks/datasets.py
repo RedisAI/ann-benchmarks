@@ -34,6 +34,10 @@ def get_dataset(which):
              url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/dbpedia/dbpedia-768.hdf5'
         elif 'amazon-reviews' in which:
              url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/amazon_reviews/amazon-reviews-384.hdf5'
+        elif 'cohere' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/cohere/%s.hdf5' % urllib.parse.quote(which)
+        elif 'laion' in which:
+            url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/laion400m/%s.hdf5' % urllib.parse.quote(which)
         elif 'hybrid' in which:
             url = 'https://s3.us-east-1.amazonaws.com/benchmarks.redislabs/vecsim/hybrid_datasets/%s.hdf5' % urllib.parse.quote(which)
         elif 'Text-to-Image' in which:
@@ -603,8 +607,13 @@ DATASETS = {
     'amazon-reviews-384': lambda out_fn: amazon_reviews(out_fn),
 }
 
+laion_datasets = [f'laion-img-emb-512-{x}-angular' for x in ['100K','1M','10M','20M','40M','400M']]
+for dataset in laion_datasets:
+     DATASETS[dataset] = lambda fn: ()
 
-
+cohere_datasets = [f'cohere-768-{x}-angular' for x in ['1K','10K','100K', '1M','10M','20M','35M']]
+for dataset in cohere_datasets:
+     DATASETS[dataset] = lambda fn: ()
 
 big_ann_datasets = [f'Text-to-Image-{x}' for x in ['10M', '20M', '30M', '40M', '50M', '60M', '70M', '80M', '90M', '100M']]
 for dataset in big_ann_datasets:
