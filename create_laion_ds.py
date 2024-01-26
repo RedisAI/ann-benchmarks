@@ -79,10 +79,8 @@ def create_ds(train_size, test_size, distance):
     )
 
     # Memory is allocated here.
-    X_train = np.empty((train_size, dim), dtype=np.float32)
-    X_train.fill(0)
-    X_test = np.empty((test_size, dim), dtype=np.float32)
-    X_test.fill(0)
+    X_train = np.zeros((train_size, dim), dtype=np.float32)
+    X_test = np.zeros((test_size, dim), dtype=np.float32)
 
     pbar = tqdm.tqdm(total=total_vecs)
     file_n = 0
