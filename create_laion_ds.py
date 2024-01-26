@@ -6,11 +6,10 @@ from joblib import Parallel, delayed
 import multiprocessing
 import tqdm
 from urllib.request import urlretrieve
-import sklearn.model_selection
 import os
 import wget
 import sys
-
+from random import randrange, seed
 
 def download(src, dst):
     if not os.path.exists(dst):
@@ -57,7 +56,7 @@ def write_output(train, test, fn, distance, point_type="float", count=100):
     neighbors = f.create_dataset("neighbors", (len(test), count), dtype="i")
     distances = f.create_dataset("distances", (len(test), count), dtype="f")
     bf = BruteForceBLAS(distance, precision=train.dtype)
-
+    f.flush()
     bf.fit(train)
     calc(bf, test, neighbors, distances, count)
     f.close()
@@ -75,39 +74,59 @@ def create_ds(train_size, test_size, distance):
     if total_vecs > vector_limit:
         print("vector limit is larger than the dataset")
         sys.exit(1)
-    pos = 0
     print(
         f"generating train set of size {train_size} and test set of size {test_size}. Fetching {total_vecs} embeddings."
     )
-    X = np.zeros((total_vecs, dim), dtype=np.float32)
+
+    # Memory is allocated here.
+    X_train = np.zeros((train_size, dim), dtype=np.float32)
+    X_test = np.zeros((test_size, dim), dtype=np.float32)
 
     pbar = tqdm.tqdm(total=total_vecs)
     file_n = 0
-    while pos < total_vecs:
+    pos_test = 0
+    pos_train = 0
+    testset_ready = False
+    while (pos_test + pos_train) < total_vecs:
         filename = f"img_emb_{file_n}.npy"
         url = f"https://the-eye.eu/public/AI/cah/laion400m-met-release/laion400m-embeddings/images/{filename}"
         download(url, filename)
         img_emb = np.load(filename)
         for row in img_emb:
-            X[pos] = row.astype(np.float32)
-            pbar.update(1)
-            pos = pos + 1
-            if pos >= total_vecs:
-                break
+            if not testset_ready:
+                X_test[pos_test] = row.astype(np.float32)
+                pbar.update(1)
+                pos_test += 1
+                if pos_test >= test_size:
+                    testset_ready = True
+            else:
+                X_train[pos_train] = row.astype(np.float32)
+                pbar.update(1)
+                pos_train += 1
+                if pos_train >= train_size:
+                    break
         file_n = file_n + 1
         if file_n > file_limit:
             print("vector limit is larger than the dataset")
             sys.exit(1)
 
-    print("Splitting %d*%d into train/test" % (X.shape[0], X.shape[1]))
-    X_train, X_test = sklearn.model_selection.train_test_split(
-        X, test_size=test_size, random_state=1
-    )
+    #randomize the test set by swapping with the train set
+    pos = 0
+    seed(0)
+    while pos < test_size:
+        row = randrange(train_size)
+        temp_test = X_test[pos].copy()
+        X_test[pos] = X_train[row].copy()
+        X_train[row] = temp_test
+        pos = pos + 1
+
+    X_train = np.array(X_train)
+    X_test = np.array(X_test)
 
     human_size = human_format(train_size)
     write_output(
-        train=np.array(X_train),
-        test=np.array(X_test),
+        train=X_train,
+        test=X_test,
         fn=f"laion-img-emb-{dim}-{human_size}-{distance}.hdf5",
         distance=distance,
         point_type="float",
